@@ -159,6 +159,25 @@ async function loadImage(src: string): Promise<HTMLImageElement> {
   })
 }
 
+// 商品画像をAPI送信用にリサイズ（Gemini分析用）
+async function resizeForAnalysis(dataUrl: string, maxSide = 768): Promise<{ base64: string; mimeType: string }> {
+  return new Promise(resolve => {
+    const img = new Image()
+    img.onload = () => {
+      const scale = Math.min(maxSide / img.naturalWidth, maxSide / img.naturalHeight, 1.0)
+      const w = Math.round(img.naturalWidth * scale)
+      const h = Math.round(img.naturalHeight * scale)
+      const canvas = document.createElement('canvas')
+      canvas.width = w; canvas.height = h
+      canvas.getContext('2d')!.drawImage(img, 0, 0, w, h)
+      const resized = canvas.toDataURL('image/jpeg', 0.85)
+      resolve({ base64: resized.split(',')[1], mimeType: 'image/jpeg' })
+    }
+    img.onerror = () => resolve({ base64: dataUrl.split(',')[1] ?? '', mimeType: 'image/jpeg' })
+    img.src = dataUrl
+  })
+}
+
 async function renderToCanvas(
   img: GeneratedImage,
   text: string,
@@ -182,6 +201,22 @@ async function renderToCanvas(
   if (imgRatio > canvasRatio) { sw = ih * canvasRatio; sx = (iw - sw) / 2 }
   else { sh = iw / canvasRatio; sy = (ih - sh) / 2 }
   ctx.drawImage(bgImg, sx, sy, sw, sh, 0, 0, cw, ch)
+
+  // 商品画像を背景の上・テキストの下に合成
+  if (productImageDataUrl) {
+    const prodImg = await loadImage(productImageDataUrl)
+    const maxH = ch * 0.90
+    const maxW = cw * 0.48
+    const scale = Math.min(maxW / prodImg.naturalWidth, maxH / prodImg.naturalHeight, 1.0)
+    const pw = Math.round(prodImg.naturalWidth * scale)
+    const ph = Math.round(prodImg.naturalHeight * scale)
+    let px2 = 0
+    if (productImagePos === 'right') px2 = cw - pw - Math.round(cw * 0.015)
+    else if (productImagePos === 'center') px2 = Math.round((cw - pw) / 2)
+    else px2 = Math.round(cw * 0.015)
+    const py2 = Math.round((ch - ph) / 2)
+    ctx.drawImage(prodImg, px2, py2, pw, ph)
+  }
 
   if (text.trim()) {
     const fontStyle = FONT_STYLES.find(f => f.id === fontStyleId)!
@@ -244,21 +279,6 @@ async function renderToCanvas(
       const stampImg = await loadImage(svgToDataUrl(stamp.svg))
       ctx.drawImage(stampImg, sx2, sy2, stampSize, stampSize)
     }
-  }
-
-  if (productImageDataUrl) {
-    const prodImg = await loadImage(productImageDataUrl)
-    const maxH = ch * 0.88
-    const maxW = cw * 0.42
-    const scale = Math.min(maxW / prodImg.naturalWidth, maxH / prodImg.naturalHeight, 1.0)
-    const pw = Math.round(prodImg.naturalWidth * scale)
-    const ph = Math.round(prodImg.naturalHeight * scale)
-    let px2 = 0
-    if (productImagePos === 'right') px2 = cw - pw - Math.round(cw * 0.02)
-    else if (productImagePos === 'center') px2 = Math.round((cw - pw) / 2)
-    else px2 = Math.round(cw * 0.02)
-    const py2 = Math.round((ch - ph) / 2)
-    ctx.drawImage(prodImg, px2, py2, pw, ph)
   }
 
   return canvas
@@ -373,6 +393,14 @@ export default function BannerGenerator() {
     const size = BANNER_SIZES[selectedSizeIdx]
     const textPosition = `${overlay.vAlign}-${overlay.hAlign}`
     try {
+      let productImageBase64: string | undefined
+      let productImageMimeType: string | undefined
+      if (productImageDataUrl) {
+        const resized = await resizeForAnalysis(productImageDataUrl)
+        productImageBase64 = resized.base64
+        productImageMimeType = resized.mimeType
+      }
+
       const res = await fetch('/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -382,6 +410,8 @@ export default function BannerGenerator() {
           color: form.mainColor, size, textPosition,
           referenceUrl: form.referenceUrl || undefined,
           designStyle: form.designStyle || undefined,
+          productImageBase64,
+          productImageMimeType,
         }),
       })
       const data = await res.json()

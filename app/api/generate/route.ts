@@ -18,6 +18,8 @@ type RequestBody = {
   textPosition?: string
   referenceUrl?: string
   designStyle?: string
+  productImageBase64?: string
+  productImageMimeType?: string
 }
 
 // ─── デザインスタイル → プロンプト変換 ────────────────────────────────────────
@@ -80,6 +82,29 @@ async function fetchPageDesignHints(url: string): Promise<string> {
     return hints.length > 0
       ? `REFERENCE PAGE DESIGN HINTS (from ${url.slice(0, 50)}): ${hints.join('. ')}. Align visual style with this page's design language.`
       : ''
+  } catch {
+    return ''
+  }
+}
+
+// ─── Gemini で商品画像を分析してバックグラウンド設計ヒントを取得 ──────────────
+async function analyzeProductImage(
+  ai: GoogleGenAI,
+  base64: string,
+  mimeType: string,
+): Promise<string> {
+  try {
+    const result = await ai.models.generateContent({
+      model: 'gemini-2.0-flash',
+      contents: [{
+        role: 'user',
+        parts: [
+          { inlineData: { mimeType, data: base64 } },
+          { text: 'Analyze this product image for commercial banner background design. Answer in English only (max 70 words): 1) Main product colors (2-3 specific colors), 2) Product visual style and mood (2-3 adjectives), 3) What abstract background style, gradient colors, and atmosphere would best showcase this product in a Rakuten commercial banner. Focus on background design, not the product itself.' },
+        ],
+      }],
+    })
+    return result.text ?? ''
   } catch {
     return ''
   }
@@ -216,12 +241,34 @@ function buildPrompt(input: {
   textPosition?: string
   designStyle?: string
   pageHints?: string
+  hasProductImage?: boolean
+  productImageAnalysis?: string
 }): string {
   const colorDesc = hexToColorDescription(input.color)
   const categoryStyle = CATEGORY_STYLE[input.category] ?? CATEGORY_STYLE['その他']
   const spaceDesc = textPositionToSpaceDesc(input.textPosition ?? 'bottom-left')
   const stylePrompt = input.designStyle ? DESIGN_STYLE_PROMPTS[input.designStyle] ?? '' : ''
 
+  // 商品画像あり → 背景だけ生成するモード
+  if (input.hasProductImage) {
+    const textSide = (input.textPosition ?? 'bottom-left').includes('left') ? 'left' : 'right'
+    const productSide = textSide === 'left' ? 'right' : 'left'
+    return [
+      `BANNER BACKGROUND ONLY: Generate an abstract atmospheric commercial banner background for "${input.productName}". The actual product photograph will be composited onto the ${productSide} side in post-production. DO NOT draw any product, object, package, bottle, bag, box, or merchandise — generate BACKGROUND ENVIRONMENT ONLY.`,
+      `TARGET AUDIENCE: "${input.target}".`,
+      stylePrompt ? `VISUAL STYLE: ${stylePrompt}` : `CATEGORY ATMOSPHERE: ${categoryStyle}`,
+      input.productImageAnalysis ? `PRODUCT COLOR & MOOD REFERENCE: ${input.productImageAnalysis}. Design the background to perfectly complement these product aesthetics.` : '',
+      input.pageHints ? input.pageHints : '',
+      `DOMINANT BACKGROUND COLOR: ${colorDesc}. Build the entire color composition around this palette.`,
+      `SPATIAL COMPOSITION: ${productSide} half of the frame — atmospheric gradient transitioning to complement product placement. ${textSide} half — clean simple area (${spaceDesc}) reserved for Japanese text overlay with minimal texture.`,
+      `BACKGROUND ELEMENTS ONLY: Soft bokeh light spheres, gentle gradients, subtle texture, elegant light rays or patterns. Abstract and minimal. No recognizable objects, no faces, no people.`,
+      `NEGATIVE SPACE: 35% clean uncluttered area in ${spaceDesc} for text overlay.`,
+      `TECHNICAL: 8K resolution, professional studio lighting atmosphere, premium contemporary color grade.`,
+      'ABSOLUTE RULES: No text, no numbers, no logos, no products, no merchandise, no human faces in the generated image.',
+    ].filter(Boolean).join(' ')
+  }
+
+  // 商品画像なし → 従来の商品込み生成
   return [
     `SUBJECT: Highly detailed commercial photograph of "${input.productName}".`,
     `AUDIENCE & MOOD: Designed to appeal to "${input.target}". Visual tone color grading and composition must resonate strongly with this demographic.`,
@@ -304,20 +351,25 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'リクエストの形式が不正です' }, { status: 400 })
   }
 
-  const { productName, category, target, catchcopy, color, size, textPosition, referenceUrl, designStyle } = body
+  const { productName, category, target, catchcopy, color, size, textPosition, referenceUrl, designStyle, productImageBase64, productImageMimeType } = body
 
   if (!productName?.trim() || !target?.trim() || !catchcopy?.trim()) {
     return NextResponse.json({ error: '商品名・ターゲット・訴求テキストは必須です' }, { status: 400 })
   }
 
-  const pageHints = await fetchPageDesignHints(referenceUrl ?? '')
-  const prompt = buildPrompt({ productName, category, target, catchcopy, color, textPosition, designStyle, pageHints })
+  const ai = new GoogleGenAI({ apiKey })
+  const hasProductImage = !!(productImageBase64 && productImageMimeType)
+
+  const [pageHints, productImageAnalysis] = await Promise.all([
+    fetchPageDesignHints(referenceUrl ?? ''),
+    hasProductImage ? analyzeProductImage(ai, productImageBase64!, productImageMimeType!) : Promise.resolve(''),
+  ])
+
+  const prompt = buildPrompt({ productName, category, target, catchcopy, color, textPosition, designStyle, pageHints, hasProductImage, productImageAnalysis })
   const reasoning = buildReasoning({ productName, category, target, catchcopy, color, textPosition, designStyle, referenceUrl })
   const aspectRatio = toImagenAspectRatio(size.width, size.height)
 
   try {
-    const ai = new GoogleGenAI({ apiKey })
-
     const response = await ai.models.generateImages({
       model: MODEL,
       prompt,
