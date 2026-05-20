@@ -104,6 +104,66 @@ function textPositionToSpaceDesc(pos: string): string {
   return map[pos] ?? 'lower-left or left side of the frame'
 }
 
+// ─── Flux専用：カテゴリ別ビジュアルスタイル（短く・英語・視覚優先）────────────
+const FLUX_CATEGORY_STYLE: Record<string, string> = {
+  '食品・飲料': 'food photography, steam rising, glistening droplets, rich texture, dark moody studio lighting, macro detail, sizzle effect, appetizing, bokeh background',
+  '美容・コスメ': 'luxury beauty product photography, white marble surface, soft butterfly lighting, elegant glow, minimal clean background, premium',
+  'ファッション': 'editorial fashion photography, crisp white studio backdrop, sharp fabric texture, boutique aesthetic, magazine quality',
+  '家電・PC': 'technology product photography, dark reflective surface, geometric angles, specular highlights, minimalist modern, sleek',
+  'スポーツ・アウトドア': 'sports product photography, high contrast bold colors, energetic dynamic composition, outdoor lifestyle, action',
+  'インテリア・家具': 'interior design photography, warm ambient lighting, scandinavian minimalist, natural wood grain, cozy lifestyle',
+  'ベビー・マタニティ': 'baby product photography, soft pastel colors, gentle diffused light, clean white background, nurturing safe',
+  'その他': 'commercial product photography, crisp studio lighting, clean background, professional presentation',
+}
+
+// カテゴリの英語アンカー（Fluxが日本語商品名を認識できない場合の補完）
+const FLUX_CATEGORY_EN: Record<string, string> = {
+  '食品・飲料': 'food and beverage',
+  '美容・コスメ': 'beauty cosmetics product',
+  'ファッション': 'fashion apparel clothing',
+  '家電・PC': 'electronics technology device',
+  'スポーツ・アウトドア': 'sports outdoor equipment',
+  'インテリア・家具': 'interior furniture home decor',
+  'ベビー・マタニティ': 'baby maternity product',
+  'その他': 'retail product',
+}
+
+// ─── Flux最適化プロンプト（Pollinations.ai専用）───────────────────────────────
+// Fluxは「商品名を先頭・短く・英語の視覚語を多用」するプロンプトが最も効く
+function buildFluxPrompt(input: {
+  productName: string
+  category: string
+  target: string
+  color: string
+  textPosition?: string
+}): string {
+  const colorDesc = hexToColorDescription(input.color)
+  const catStyle = FLUX_CATEGORY_STYLE[input.category] ?? FLUX_CATEGORY_STYLE['その他']
+  const catEn = FLUX_CATEGORY_EN[input.category] ?? 'product'
+
+  // 商品を配置すべきエリアと空けるエリアを簡潔に指示
+  const spaceMap: Record<string, string> = {
+    'bottom-left':   'subject positioned in right-center area, large empty clean space on lower-left third',
+    'bottom-center': 'subject positioned in upper-center, large empty clean space at the bottom',
+    'bottom-right':  'subject positioned in left-center area, large empty clean space on lower-right third',
+    'top-left':      'subject positioned in right-center area, empty clean space on upper-left',
+    'top-center':    'subject positioned in lower-center, empty clean space at the top',
+    'top-right':     'subject positioned in left-center area, empty clean space on upper-right',
+  }
+  const spaceInstr = spaceMap[input.textPosition ?? 'bottom-left']
+
+  return [
+    // 先頭に商品名＋英語カテゴリアンカー（Fluxは先頭トークンを最も重視）
+    `${input.productName}, ${catEn}`,
+    catStyle,
+    `${colorDesc} dominant color scheme`,
+    spaceInstr,
+    'highly detailed sharp focus',
+    'no text no watermarks no logos no letters no numbers',
+    'photorealistic 8k commercial photography',
+  ].join(', ')
+}
+
 // ─── 楽天EC バナー制作 20の鉄則 ──────────────────────────────────────────────
 const RAKUTEN_BANNER_RULES = [
   'Main product clearly visible and occupying at least 55% of the frame',
@@ -229,16 +289,17 @@ export async function POST(req: NextRequest) {
   }
 
   const prompt = buildPrompt({ productName, category, target, catchcopy, color, textPosition })
+  const fluxPrompt = buildFluxPrompt({ productName, category, target, color, textPosition })
   const reasoning = buildReasoning({ productName, category, target, catchcopy, color, textPosition })
 
   const seed = Math.floor(Math.random() * 1_000_000)
   let imageData: { base64: string; contentType: string }
   let imageSource = 'pollinations'
 
-  // ── 1st try: Pollinations.ai（モデル指定なしの最もベーシックなURL）──
+  // ── 1st try: Pollinations.ai（Flux最適化プロンプト）──
   try {
     const pUrl =
-      `${POLLINATIONS_BASE}/${encodeURIComponent(prompt)}` +
+      `${POLLINATIONS_BASE}/${encodeURIComponent(fluxPrompt)}` +
       `?width=${size.width}&height=${size.height}&nologo=true&seed=${seed}`
     imageData = await fetchImageAsBase64(pUrl, 45_000)
   } catch (err) {
