@@ -20,6 +20,16 @@ const CATEGORIES = [
 
 const QUICK_COLORS = ['#bf0000', '#1a1a2e', '#0f3460', '#2d6a4f', '#e76f51', '#264653']
 
+const DESIGN_STYLES = [
+  { id: 'professional', label: 'プロフェッショナル', emoji: '💼', desc: '高級感・信頼感' },
+  { id: 'pop',          label: 'ポップ',             emoji: '🎉', desc: '元気・活気・インパクト' },
+  { id: 'cute',         label: 'かわいい',           emoji: '🌸', desc: 'パステル・ほっこり' },
+  { id: 'appetizing',   label: 'おいしそう',         emoji: '😋', desc: 'シズル感・食欲喚起' },
+  { id: 'stylish',      label: 'スタイリッシュ',     emoji: '✨', desc: 'クール・モダン' },
+  { id: 'natural',      label: 'ナチュラル',         emoji: '🌿', desc: '自然・やさしい' },
+] as const
+type DesignStyleId = typeof DESIGN_STYLES[number]['id']
+
 const FONT_STYLES = [
   {
     id: 'gothic' as const,
@@ -87,6 +97,8 @@ type FormData = {
   target: string
   appealText: string
   mainColor: string
+  referenceUrl: string
+  designStyle: DesignStyleId | ''
 }
 
 type OverlaySettings = {
@@ -260,6 +272,7 @@ export default function BannerGenerator() {
   // Step 1
   const [form, setForm] = useState<FormData>({
     productName: '', category: '', target: '', appealText: '', mainColor: '#bf0000',
+    referenceUrl: '', designStyle: '',
   })
   const [errors, setErrors] = useState<Partial<FormData>>({})
 
@@ -321,6 +334,8 @@ export default function BannerGenerator() {
           productName: form.productName, category: form.category,
           target: form.target, catchcopy: form.appealText,
           color: form.mainColor, size, textPosition,
+          referenceUrl: form.referenceUrl || undefined,
+          designStyle: form.designStyle || undefined,
         }),
       })
       const data = await res.json()
@@ -550,6 +565,61 @@ export default function BannerGenerator() {
                         : 'border-slate-200 bg-white focus:border-red-400 focus:ring-2 focus:ring-red-50'}`}
                   />
                   {errors.appealText && <p className="text-red-500 text-xs mt-1.5">{errors.appealText}</p>}
+                </div>
+
+                {/* 参照URL */}
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">
+                    楽天ページURL
+                    <span className="ml-2 text-[10px] font-normal text-slate-400 border border-slate-200 rounded-full px-2 py-0.5">任意</span>
+                  </label>
+                  <div className="relative">
+                    <input type="url" value={form.referenceUrl}
+                      onChange={e => setForm(f => ({ ...f, referenceUrl: e.target.value }))}
+                      placeholder="https://item.rakuten.co.jp/shop/item/"
+                      className="w-full pl-9 pr-4 py-3 text-sm rounded-xl border border-slate-200 bg-white outline-none focus:border-red-400 focus:ring-2 focus:ring-red-50 transition-all"
+                    />
+                    <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                    </svg>
+                  </div>
+                  <p className="text-[11px] text-slate-400 mt-1.5 leading-relaxed">
+                    商品ページのURLを入力するとデザインの雰囲気を参考にして生成します
+                  </p>
+                </div>
+
+                {/* デザインスタイル */}
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2.5">
+                    デザインイメージ
+                    <span className="ml-2 text-[10px] font-normal text-slate-400 border border-slate-200 rounded-full px-2 py-0.5">任意</span>
+                  </label>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    {DESIGN_STYLES.map(style => (
+                      <button key={style.id}
+                        onClick={() => setForm(f => ({ ...f, designStyle: f.designStyle === style.id ? '' : style.id as DesignStyleId }))}
+                        className="flex items-center gap-2.5 px-3 py-3 rounded-xl border text-left transition-all hover:scale-[1.02] active:scale-100"
+                        style={form.designStyle === style.id ? {
+                          background: 'linear-gradient(135deg, #fff1f2, #ffe4e6)',
+                          borderColor: '#fca5a5',
+                          boxShadow: '0 0 0 2px rgba(220,38,38,0.15)',
+                        } : { borderColor: '#e2e8f0', background: 'white' }}>
+                        <span className="text-xl leading-none flex-shrink-0">{style.emoji}</span>
+                        <div className="min-w-0">
+                          <p className={`text-xs font-bold leading-none mb-0.5 ${form.designStyle === style.id ? 'text-red-700' : 'text-slate-700'}`}>
+                            {style.label}
+                          </p>
+                          <p className="text-[10px] text-slate-400 leading-tight">{style.desc}</p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                  {form.designStyle && (
+                    <button onClick={() => setForm(f => ({ ...f, designStyle: '' }))}
+                      className="mt-2 text-xs text-slate-400 hover:text-slate-600 transition-colors">
+                      選択をクリア
+                    </button>
+                  )}
                 </div>
 
                 {/* メインカラー */}

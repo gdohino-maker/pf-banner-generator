@@ -16,6 +16,73 @@ type RequestBody = {
   color: string
   size: { label: string; width: number; height: number }
   textPosition?: string
+  referenceUrl?: string
+  designStyle?: string
+}
+
+// ─── デザインスタイル → プロンプト変換 ────────────────────────────────────────
+const DESIGN_STYLE_PROMPTS: Record<string, string> = {
+  professional:
+    'High-end professional commercial photography. Clean minimalist composition. Premium sophisticated materials and refined lighting. Corporate elegance. Muted tones with intentional accent.',
+  pop:
+    'Vibrant pop art inspired commercial photography. Bold saturated colors. Dynamic energetic composition. Fun playful atmosphere with strong contrast and cheerful energy.',
+  cute:
+    'Kawaii cute Japanese style photography. Soft pastel palette — cherry blossom pink, mint green, lavender, cream white. Warm cozy atmosphere. Gentle rounded elements. Sweet charming aesthetic.',
+  appetizing:
+    'Maximum appetite appeal photography. Sizzle effect with visible steam wisps and glistening water droplets. Rich saturated colors evoking freshness and taste. Close-up macro textures showing irresistible food details.',
+  stylish:
+    'Ultra-modern cool stylish commercial photography. High-contrast dark or pure-white background. Sharp geometric angular composition. Fashion-forward editorial aesthetic. Contemporary luxury magazine quality.',
+  natural:
+    'Natural organic lifestyle photography. Soft warm natural daylight with gentle bokeh. Earth tones, botanical elements, wooden textures, linen. Clean airy eco-friendly atmosphere.',
+}
+
+const DESIGN_STYLE_JA: Record<string, string> = {
+  professional: 'プロフェッショナル（高級感・信頼感）',
+  pop:          'ポップ（元気・活気・インパクト）',
+  cute:         'かわいい（パステル・ほっこり）',
+  appetizing:   'おいしそう（シズル感・食欲喚起）',
+  stylish:      'スタイリッシュ（クール・モダン）',
+  natural:      'ナチュラル（自然・優しい）',
+}
+
+// ─── 楽天URLからページデザインヒント取得 ─────────────────────────────────────
+async function fetchPageDesignHints(url: string): Promise<string> {
+  if (!url?.trim()) return ''
+  try {
+    const res = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; BannerBot/1.0; +https://banner-app)',
+        'Accept': 'text/html,application/xhtml+xml',
+        'Accept-Language': 'ja,en;q=0.9',
+      },
+      signal: AbortSignal.timeout(7000),
+    })
+    if (!res.ok) return ''
+    const html = await res.text()
+
+    const clean = (s: string) => s.replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'").trim()
+
+    const themeColor =
+      html.match(/name=["']theme-color["'][^>]*content=["']([^"']+)["']/i)?.[1] ||
+      html.match(/content=["']([^"']+)["'][^>]*name=["']theme-color["']/i)?.[1]
+    const ogTitle =
+      html.match(/property=["']og:title["'][^>]*content=["']([^"']+)["']/i)?.[1] ||
+      html.match(/<title>([^<]+)<\/title>/i)?.[1]
+    const ogDesc =
+      html.match(/property=["']og:description["'][^>]*content=["']([^"']+)["']/i)?.[1] ||
+      html.match(/name=["']description["'][^>]*content=["']([^"']+)["']/i)?.[1]
+
+    const hints: string[] = []
+    if (themeColor) hints.push(`reference page accent color: ${themeColor}`)
+    if (ogTitle)    hints.push(`reference product title: "${clean(ogTitle).slice(0, 80)}"`)
+    if (ogDesc)     hints.push(`reference page context: "${clean(ogDesc).slice(0, 150)}"`)
+
+    return hints.length > 0
+      ? `REFERENCE PAGE DESIGN HINTS (from ${url.slice(0, 50)}): ${hints.join('. ')}. Align visual style with this page's design language.`
+      : ''
+  } catch {
+    return ''
+  }
 }
 
 // ─── Imagen 4 サポートアスペクト比へのマッピング ─────────────────────────────
@@ -147,20 +214,24 @@ function buildPrompt(input: {
   catchcopy: string
   color: string
   textPosition?: string
+  designStyle?: string
+  pageHints?: string
 }): string {
   const colorDesc = hexToColorDescription(input.color)
   const categoryStyle = CATEGORY_STYLE[input.category] ?? CATEGORY_STYLE['その他']
   const spaceDesc = textPositionToSpaceDesc(input.textPosition ?? 'bottom-left')
+  const stylePrompt = input.designStyle ? DESIGN_STYLE_PROMPTS[input.designStyle] ?? '' : ''
 
   return [
     `SUBJECT: Highly detailed commercial photograph of "${input.productName}".`,
     `AUDIENCE & MOOD: Designed to appeal to "${input.target}". Visual tone color grading and composition must resonate strongly with this demographic.`,
-    `CATEGORY STYLE — ${input.category || 'General'}: ${categoryStyle}`,
+    stylePrompt ? `DESIGN STYLE — OVERRIDE PRIORITY: ${stylePrompt}` : `CATEGORY STYLE — ${input.category || 'General'}: ${categoryStyle}`,
+    input.pageHints ? input.pageHints : '',
     `TECHNICAL: 8K resolution photorealistic sharp focus professional studio lighting. Premium contemporary color grade.`,
     `COLOR THEME: Dominant accent and background color must be ${colorDesc}. Use this color as intentional design element throughout.`,
     `EC RULES (all 20 must be satisfied): ${RAKUTEN_BANNER_RULES.join(' | ')}`,
     `NEGATIVE SPACE — CRITICAL REQUIREMENT: Reserve a clean uncluttered area of exactly 35% of the total frame in the ${spaceDesc}. This area receives Japanese advertising text ("${input.catchcopy}") overlaid in post-production. Must have simple texture only — gradient solid color or soft bokeh. Position ALL visual interest AWAY from this reserved area.`,
-  ].join(' ')
+  ].filter(Boolean).join(' ')
 }
 
 // ─── AI診断レポート生成（日本語 · 提案書用）──────────────────────────────────
@@ -171,6 +242,8 @@ function buildReasoning(input: {
   catchcopy: string
   color: string
   textPosition?: string
+  designStyle?: string
+  referenceUrl?: string
 }): ReasoningPoint[] {
   const colorDesc = hexToColorDescription(input.color)
   const colorPsych = hexToColorPsychology(input.color)
@@ -200,12 +273,16 @@ function buildReasoning(input: {
     {
       icon: '📸',
       title: 'カテゴリ演出の根拠',
-      body: catReasoning,
+      body: input.designStyle
+        ? `デザインスタイル「${DESIGN_STYLE_JA[input.designStyle] ?? input.designStyle}」を最優先に採用。${catReasoning}`
+        : catReasoning,
     },
     {
       icon: '📱',
       title: '楽天EC最適化の根拠',
-      body: `楽天市場バナー制作20鉄則に準拠した高コントラスト・モバイルファースト構図を採用。PCとスマートフォンの両方で最大訴求力を発揮し、サムネイル（200×200px）でも商品が明確に認識できる視認性を確保しています。`,
+      body: input.referenceUrl
+        ? `参照URL（${input.referenceUrl.slice(0, 40)}...）のページデザイン言語を反映し、楽天市場バナー制作20鉄則に準拠した構図を生成。PCとスマートフォンの両方で最大訴求力を発揮し、サムネイル（200×200px）でも商品が明確に認識できる視認性を確保しています。`
+        : `楽天市場バナー制作20鉄則に準拠した高コントラスト・モバイルファースト構図を採用。PCとスマートフォンの両方で最大訴求力を発揮し、サムネイル（200×200px）でも商品が明確に認識できる視認性を確保しています。`,
     },
   ]
 }
@@ -227,14 +304,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'リクエストの形式が不正です' }, { status: 400 })
   }
 
-  const { productName, category, target, catchcopy, color, size, textPosition } = body
+  const { productName, category, target, catchcopy, color, size, textPosition, referenceUrl, designStyle } = body
 
   if (!productName?.trim() || !target?.trim() || !catchcopy?.trim()) {
     return NextResponse.json({ error: '商品名・ターゲット・訴求テキストは必須です' }, { status: 400 })
   }
 
-  const prompt = buildPrompt({ productName, category, target, catchcopy, color, textPosition })
-  const reasoning = buildReasoning({ productName, category, target, catchcopy, color, textPosition })
+  const pageHints = await fetchPageDesignHints(referenceUrl ?? '')
+  const prompt = buildPrompt({ productName, category, target, catchcopy, color, textPosition, designStyle, pageHints })
+  const reasoning = buildReasoning({ productName, category, target, catchcopy, color, textPosition, designStyle, referenceUrl })
   const aspectRatio = toImagenAspectRatio(size.width, size.height)
 
   try {
