@@ -48,26 +48,39 @@ const FONT_STYLES = [
 ]
 type FontStyleId = typeof FONT_STYLES[number]['id']
 
+// 楽天スタイルスタンプ
 const STAMPS = [
   {
-    id: 'free_shipping', label: '送料無料',
-    svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="48" fill="#CC0000"/><circle cx="50" cy="50" r="43" fill="none" stroke="rgba(255,255,255,0.55)" stroke-width="2" stroke-dasharray="5 3"/><text x="50" y="45" font-family="sans-serif" font-weight="900" font-size="20" fill="white" text-anchor="middle">送料</text><text x="50" y="70" font-family="sans-serif" font-weight="900" font-size="20" fill="white" text-anchor="middle">無料</text></svg>`,
+    id: 'point_10x', label: 'ポイント10倍',
+    svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><polygon points="50,3 60,27 83,17 73,40 97,50 73,60 83,83 60,73 50,97 40,73 17,83 27,60 3,50 27,40 17,17 40,27" fill="#BF0000"/><circle cx="50" cy="50" r="29" fill="#D40000"/><circle cx="50" cy="50" r="26" fill="none" stroke="#FFD700" stroke-width="2"/><text x="50" y="43" font-family="sans-serif" font-weight="900" font-size="9" fill="#FFD700" text-anchor="middle">ポイント</text><text x="50" y="61" font-family="sans-serif" font-weight="900" font-size="18" fill="white" text-anchor="middle">10倍</text></svg>`,
   },
   {
-    id: 'points_10x', label: 'ポイント10倍',
-    svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><path d="M50,3 L61,36 L96,36 L69,57 L80,90 L50,70 L20,90 L31,57 L4,36 L39,36Z" fill="#E8A000"/><path d="M50,12 L59,40 L87,40 L65,56 L73,83 L50,67 L27,83 L35,56 L13,40 L41,40Z" fill="#F5C400"/><text x="50" y="50" font-family="sans-serif" font-weight="900" font-size="11" fill="white" text-anchor="middle">ポイント</text><text x="50" y="66" font-family="sans-serif" font-weight="900" font-size="16" fill="white" text-anchor="middle">10倍!</text></svg>`,
+    id: 'free_shipping', label: '送料無料',
+    svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect x="4" y="18" width="92" height="64" rx="32" fill="#BF0000"/><rect x="8" y="22" width="84" height="56" rx="28" fill="none" stroke="rgba(255,255,255,0.5)" stroke-width="1.5"/><text x="50" y="48" font-family="sans-serif" font-weight="900" font-size="18" fill="white" text-anchor="middle">送料</text><text x="50" y="70" font-family="sans-serif" font-weight="900" font-size="18" fill="white" text-anchor="middle">無料</text></svg>`,
+  },
+  {
+    id: 'asuraku', label: 'あす楽',
+    svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect x="4" y="4" width="92" height="92" rx="12" fill="#0098D0"/><rect x="8" y="8" width="84" height="84" rx="9" fill="none" stroke="rgba(255,255,255,0.4)" stroke-width="1.5"/><polygon points="50,20 73,38 73,55 27,55 27,38" fill="none" stroke="rgba(255,255,255,0.65)" stroke-width="2.5" stroke-linejoin="round"/><rect x="40" y="42" width="20" height="13" rx="2" fill="rgba(255,255,255,0.3)"/><text x="50" y="76" font-family="sans-serif" font-weight="900" font-size="20" fill="white" text-anchor="middle">あす楽</text></svg>`,
+  },
+  {
+    id: 'time_sale', label: 'タイムセール',
+    svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="47" fill="#E84000"/><circle cx="50" cy="50" r="43" fill="none" stroke="rgba(255,255,255,0.45)" stroke-width="1.5"/><circle cx="50" cy="50" r="5" fill="rgba(255,255,255,0.35)"/><line x1="50" y1="45" x2="50" y2="30" stroke="rgba(255,255,255,0.35)" stroke-width="2" stroke-linecap="round"/><line x1="50" y1="45" x2="60" y2="40" stroke="rgba(255,255,255,0.35)" stroke-width="2" stroke-linecap="round"/><text x="50" y="67" font-family="sans-serif" font-weight="900" font-size="13" fill="white" text-anchor="middle">タイム</text><text x="50" y="83" font-family="sans-serif" font-weight="900" font-size="13" fill="white" text-anchor="middle">セール</text></svg>`,
+  },
+  {
+    id: 'coupon', label: 'クーポン',
+    svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect x="4" y="20" width="92" height="60" rx="8" fill="#F57C00"/><line x1="4" y1="40" x2="96" y2="40" stroke="rgba(255,255,255,0.4)" stroke-width="1" stroke-dasharray="5 3"/><line x1="4" y1="62" x2="96" y2="62" stroke="rgba(255,255,255,0.4)" stroke-width="1" stroke-dasharray="5 3"/><text x="50" y="36" font-family="sans-serif" font-weight="700" font-size="8" fill="rgba(255,255,255,0.75)" text-anchor="middle">──────────</text><text x="50" y="55" font-family="sans-serif" font-weight="900" font-size="18" fill="white" text-anchor="middle">クーポン</text><text x="50" y="74" font-family="sans-serif" font-weight="700" font-size="9" fill="rgba(255,255,255,0.85)" text-anchor="middle">使えます</text></svg>`,
   },
   {
     id: 'limited', label: '期間限定',
-    svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><polygon points="50,4 96,28 96,72 50,96 4,72 4,28" fill="#1D4ED8"/><polygon points="50,11 89,32 89,68 50,89 11,68 11,32" fill="none" stroke="rgba(255,255,255,0.35)" stroke-width="1.5"/><text x="50" y="48" font-family="sans-serif" font-weight="900" font-size="13" fill="white" text-anchor="middle">期間</text><text x="50" y="66" font-family="sans-serif" font-weight="900" font-size="13" fill="white" text-anchor="middle">限定</text></svg>`,
+    svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><polygon points="50,4 96,26 96,74 50,96 4,74 4,26" fill="#BF0000"/><polygon points="50,10 91,30 91,70 50,90 9,70 9,30" fill="none" stroke="rgba(255,255,255,0.4)" stroke-width="1.5"/><text x="50" y="47" font-family="sans-serif" font-weight="900" font-size="16" fill="white" text-anchor="middle">期間</text><text x="50" y="67" font-family="sans-serif" font-weight="900" font-size="16" fill="white" text-anchor="middle">限定</text></svg>`,
   },
   {
-    id: 'new_arrival', label: '新登場',
-    svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect x="4" y="4" width="92" height="92" rx="20" fill="#059669"/><rect x="10" y="10" width="80" height="80" rx="15" fill="none" stroke="rgba(255,255,255,0.35)" stroke-width="1.5"/><text x="50" y="46" font-family="sans-serif" font-weight="900" font-size="15" fill="white" text-anchor="middle">新</text><text x="50" y="67" font-family="sans-serif" font-weight="900" font-size="15" fill="white" text-anchor="middle">登場</text></svg>`,
+    id: 'sale', label: 'スーパーSALE',
+    svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect x="4" y="4" width="92" height="92" rx="10" fill="#BF0000"/><rect x="8" y="8" width="84" height="84" rx="7" fill="none" stroke="rgba(255,255,255,0.35)" stroke-width="1.5"/><text x="50" y="37" font-family="sans-serif" font-weight="900" font-size="10" fill="rgba(255,255,255,0.85)" text-anchor="middle">楽天</text><text x="50" y="63" font-family="sans-serif" font-weight="900" font-size="26" fill="white" text-anchor="middle">SALE</text><text x="50" y="78" font-family="sans-serif" font-weight="900" font-size="9" fill="#FFD700" text-anchor="middle">スーパーセール</text></svg>`,
   },
   {
-    id: 'sale', label: 'SALE中',
-    svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><path d="M50,4 L96,50 L50,96 L4,50Z" fill="#DC2626"/><path d="M50,13 L87,50 L50,87 L13,50Z" fill="none" stroke="rgba(255,255,255,0.35)" stroke-width="1.5"/><text x="50" y="46" font-family="sans-serif" font-weight="900" font-size="15" fill="white" text-anchor="middle">SALE</text><text x="50" y="65" font-family="sans-serif" font-weight="900" font-size="12" fill="white" text-anchor="middle">開催中</text></svg>`,
+    id: 'new', label: '新発売',
+    svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="47" fill="#00875A"/><circle cx="50" cy="50" r="43" fill="none" stroke="rgba(255,255,255,0.4)" stroke-width="1.5"/><text x="50" y="44" font-family="sans-serif" font-weight="900" font-size="15" fill="rgba(255,255,255,0.9)" text-anchor="middle">NEW</text><text x="50" y="64" font-family="sans-serif" font-weight="900" font-size="15" fill="white" text-anchor="middle">新発売</text></svg>`,
   },
 ]
 
@@ -78,6 +91,15 @@ const STAMP_POSITIONS = [
   { id: 'bottom-right', label: '右下', row: 1, col: 1 },
 ] as const
 type StampPosition = typeof STAMP_POSITIONS[number]['id']
+
+const TEXT_SIZES = [
+  { id: 'xs' as const, label: '極小', cssClamp: 'clamp(7px, 1.8cqw, 12px)',  canvasScale: 0.55 },
+  { id: 'sm' as const, label: '小',   cssClamp: 'clamp(9px, 2.4cqw, 17px)',  canvasScale: 0.80 },
+  { id: 'md' as const, label: '中',   cssClamp: 'clamp(11px, 3cqw, 22px)',   canvasScale: 1.00 },
+  { id: 'lg' as const, label: '大',   cssClamp: 'clamp(14px, 4.2cqw, 32px)', canvasScale: 1.40 },
+  { id: 'xl' as const, label: '特大', cssClamp: 'clamp(18px, 5.8cqw, 44px)', canvasScale: 1.85 },
+]
+type TextSizeId = typeof TEXT_SIZES[number]['id']
 
 // ─── 型定義 ───────────────────────────────────────────────────────────────────
 type ReasoningPoint = { icon: string; title: string; body: string }
@@ -105,6 +127,7 @@ type OverlaySettings = {
   hAlign: 'left' | 'center' | 'right'
   vAlign: 'top' | 'bottom'
   textColor: 'white' | 'black'
+  textSizeId: TextSizeId
 }
 
 // ─── ユーティリティ ───────────────────────────────────────────────────────────
@@ -160,7 +183,8 @@ async function renderToCanvas(
 
   if (text.trim()) {
     const fontStyle = FONT_STYLES.find(f => f.id === fontStyleId)!
-    const fontSize = Math.round(Math.max(18, Math.min(ch * 0.17, 80)))
+    const sizeScale = TEXT_SIZES.find(s => s.id === overlay.textSizeId)?.canvasScale ?? 1.0
+    const fontSize = Math.round(Math.max(12, Math.min(ch * 0.17, 80)) * sizeScale)
     const lineHeight = fontSize * 1.35
     const padding = Math.round(Math.max(20, cw * 0.035))
     const maxTextWidth = cw * 0.60
@@ -278,7 +302,7 @@ export default function BannerGenerator() {
 
   // Step 2
   const [selectedSizeIdx, setSelectedSizeIdx] = useState(1) // PC特集バナーをデフォルト
-  const [overlay, setOverlay] = useState<OverlaySettings>({ hAlign: 'left', vAlign: 'bottom', textColor: 'white' })
+  const [overlay, setOverlay] = useState<OverlaySettings>({ hAlign: 'left', vAlign: 'bottom', textColor: 'white', textSizeId: 'md' })
   const [fontStyleId, setFontStyleId] = useState<FontStyleId>('gothic')
   const [activeStamp, setActiveStamp] = useState<string | null>(null)
   const [stampPosition, setStampPosition] = useState<StampPosition>('top-right')
@@ -763,6 +787,22 @@ export default function BannerGenerator() {
                         ))}
                       </div>
                     </div>
+
+                    {/* テキストサイズ */}
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-600 mb-2">テキストサイズ</label>
+                      <div className="flex gap-1.5">
+                        {TEXT_SIZES.map(size => (
+                          <button key={size.id} onClick={() => setOverlay(o => ({ ...o, textSizeId: size.id }))}
+                            className={`flex-1 py-2.5 rounded-xl border text-xs font-bold transition-all
+                              ${overlay.textSizeId === size.id ? 'border-blue-400 text-blue-700' : 'border-slate-200 text-slate-500 hover:bg-slate-50'}`}
+                            style={overlay.textSizeId === size.id ? { background: 'linear-gradient(135deg, #eff6ff, #dbeafe)' } : {}}>
+                            {size.label}
+                          </button>
+                        ))}
+                      </div>
+                      <p className="text-[10px] text-slate-400 mt-1.5">プレビューと書き出し両方に反映されます</p>
+                    </div>
                   </div>
 
                   {/* 右列：スタンプ & サイズ */}
@@ -990,7 +1030,7 @@ export default function BannerGenerator() {
                               color: overlay.textColor === 'white' ? '#ffffff' : '#111111',
                               textShadow: textShadowCSS,
                               fontFamily: activeFontStyle.cssVar,
-                              fontSize: 'clamp(10px, 3cqw, 22px)',
+                              fontSize: TEXT_SIZES.find(s => s.id === overlay.textSizeId)?.cssClamp ?? 'clamp(11px, 3cqw, 22px)',
                               wordBreak: 'break-all',
                             }}>
                             {form.appealText}
