@@ -159,6 +159,38 @@ async function loadImage(src: string): Promise<HTMLImageElement> {
   })
 }
 
+// 商品画像のコーナーから背景色をサンプリング
+function sampleCornerColor(dataUrl: string): Promise<string> {
+  return new Promise(resolve => {
+    const img = new Image()
+    img.onload = () => {
+      const c = document.createElement('canvas')
+      c.width = img.naturalWidth; c.height = img.naturalHeight
+      const ctx = c.getContext('2d')!
+      ctx.drawImage(img, 0, 0)
+      const sz = Math.max(4, Math.round(Math.min(img.naturalWidth, img.naturalHeight) * 0.05))
+      const w = img.naturalWidth, h = img.naturalHeight
+      const regions = [
+        ctx.getImageData(0, 0, sz, sz),
+        ctx.getImageData(w - sz, 0, sz, sz),
+        ctx.getImageData(0, h - sz, sz, sz),
+        ctx.getImageData(w - sz, h - sz, sz, sz),
+      ]
+      let r = 0, g = 0, b = 0, n = 0
+      for (const d of regions) {
+        for (let i = 0; i < d.data.length; i += 4) {
+          if (d.data[i + 3] > 100) { r += d.data[i]; g += d.data[i + 1]; b += d.data[i + 2]; n++ }
+        }
+      }
+      if (n === 0) { resolve('#f5f5f5'); return }
+      const hex = (v: number) => Math.round(v / n).toString(16).padStart(2, '0')
+      resolve(`#${hex(r)}${hex(g)}${hex(b)}`)
+    }
+    img.onerror = () => resolve('#f5f5f5')
+    img.src = dataUrl
+  })
+}
+
 // 商品画像をAPI送信用にリサイズ（Gemini分析用）
 async function resizeForAnalysis(dataUrl: string, maxSide = 768): Promise<{ base64: string; mimeType: string }> {
   return new Promise(resolve => {
@@ -187,6 +219,7 @@ async function renderToCanvas(
   stampPosition: StampPosition,
   productImageDataUrl: string | null = null,
   productImagePos: 'left' | 'center' | 'right' = 'right',
+  productBgColor = '#f5f5f5',
 ): Promise<HTMLCanvasElement> {
   const { width: cw, height: ch } = img.size
   const canvas = document.createElement('canvas')
@@ -202,19 +235,24 @@ async function renderToCanvas(
   else { sh = iw / canvasRatio; sy = (ih - sh) / 2 }
   ctx.drawImage(bgImg, sx, sy, sw, sh, 0, 0, cw, ch)
 
-  // 商品画像を背景の上・テキストの下に合成
+  // 商品画像を背景の上・テキストの下に合成（背景色ゾーンでシームレスに）
   if (productImageDataUrl) {
     const prodImg = await loadImage(productImageDataUrl)
-    const maxH = ch * 0.90
+    const maxH = ch * 0.92
     const maxW = cw * 0.48
     const scale = Math.min(maxW / prodImg.naturalWidth, maxH / prodImg.naturalHeight, 1.0)
     const pw = Math.round(prodImg.naturalWidth * scale)
     const ph = Math.round(prodImg.naturalHeight * scale)
     let px2 = 0
-    if (productImagePos === 'right') px2 = cw - pw - Math.round(cw * 0.015)
+    if (productImagePos === 'right') px2 = cw - pw - Math.round(cw * 0.01)
     else if (productImagePos === 'center') px2 = Math.round((cw - pw) / 2)
-    else px2 = Math.round(cw * 0.015)
+    else px2 = Math.round(cw * 0.01)
     const py2 = Math.round((ch - ph) / 2)
+    // 商品の背景色でゾーンを全高塗りつぶし → シームレス合成
+    ctx.fillStyle = productBgColor
+    if (productImagePos === 'right') ctx.fillRect(px2, 0, cw - px2, ch)
+    else if (productImagePos === 'left') ctx.fillRect(0, 0, px2 + pw, ch)
+    else ctx.fillRect(px2, 0, pw, ch)
     ctx.drawImage(prodImg, px2, py2, pw, ph)
   }
 
@@ -359,6 +397,7 @@ export default function BannerGenerator() {
   const [isDownloading, setIsDownloading] = useState(false)
   const [productImageDataUrl, setProductImageDataUrl] = useState<string | null>(null)
   const [productImagePos, setProductImagePos] = useState<'left' | 'center' | 'right'>('right')
+  const [productBgColor, setProductBgColor] = useState<string>('#f5f5f5')
   const progressRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   // ─── バリデーション ─────────────────────────────────────────────────────────
@@ -412,6 +451,7 @@ export default function BannerGenerator() {
           designStyle: form.designStyle || undefined,
           productImageBase64,
           productImageMimeType,
+          productBgColor: productImageDataUrl ? productBgColor : undefined,
         }),
       })
       const data = await res.json()
@@ -450,6 +490,7 @@ export default function BannerGenerator() {
     setGenerateError(null)
     setFeedback(null)
     setProductImageDataUrl(null)
+    setProductBgColor('#f5f5f5')
     stopProgress(0)
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
@@ -459,7 +500,7 @@ export default function BannerGenerator() {
     if (!generatedImage) return
     setIsDownloading(true)
     try {
-      const canvas = await renderToCanvas(generatedImage, form.appealText, overlay, fontStyleId, activeStamp, stampPosition, productImageDataUrl, productImagePos)
+      const canvas = await renderToCanvas(generatedImage, form.appealText, overlay, fontStyleId, activeStamp, stampPosition, productImageDataUrl, productImagePos, productBgColor)
       canvas.toBlob(blob => {
         if (!blob) return
         const url = URL.createObjectURL(blob)
@@ -470,7 +511,7 @@ export default function BannerGenerator() {
         URL.revokeObjectURL(url)
       }, 'image/jpeg', 0.93)
     } finally { setIsDownloading(false) }
-  }, [generatedImage, form.appealText, overlay, fontStyleId, activeStamp, stampPosition, productImageDataUrl, productImagePos])
+  }, [generatedImage, form.appealText, overlay, fontStyleId, activeStamp, stampPosition, productImageDataUrl, productImagePos, productBgColor])
 
   const downloadRaw = () => {
     if (!generatedImage) return
@@ -695,7 +736,12 @@ export default function BannerGenerator() {
                         const file = e.target.files?.[0]
                         if (!file) return
                         const reader = new FileReader()
-                        reader.onload = ev => setProductImageDataUrl(ev.target?.result as string)
+                        reader.onload = async ev => {
+                          const url = ev.target?.result as string
+                          setProductImageDataUrl(url)
+                          const bg = await sampleCornerColor(url)
+                          setProductBgColor(bg)
+                        }
                         reader.readAsDataURL(file)
                         e.target.value = ''
                       }} />
@@ -1166,22 +1212,35 @@ export default function BannerGenerator() {
                         </div>
                       )}
 
-                      {/* 商品画像オーバーレイ */}
+                      {/* 商品画像オーバーレイ（背景色ゾーン付き） */}
                       {productImageDataUrl && (
-                        <div className="absolute pointer-events-none flex items-center"
-                          style={{
-                            top: '50%',
-                            maxHeight: '88%',
-                            maxWidth: '42%',
-                            ...(productImagePos === 'center'
-                              ? { left: '50%', transform: 'translate(-50%, -50%)' }
-                              : productImagePos === 'right'
-                                ? { right: '2%', transform: 'translateY(-50%)' }
-                                : { left: '2%', transform: 'translateY(-50%)' }),
-                          }}>
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={productImageDataUrl} alt="商品画像" className="max-h-full max-w-full object-contain drop-shadow-2xl" />
-                        </div>
+                        <>
+                          {/* 背景色ゾーン */}
+                          <div className="absolute inset-y-0 pointer-events-none"
+                            style={{
+                              backgroundColor: productBgColor,
+                              ...(productImagePos === 'right'
+                                ? { right: 0, width: '49%' }
+                                : productImagePos === 'left'
+                                  ? { left: 0, width: '49%' }
+                                  : { left: '25%', width: '50%' }),
+                            }} />
+                          {/* 商品画像 */}
+                          <div className="absolute pointer-events-none flex items-center"
+                            style={{
+                              top: '50%',
+                              maxHeight: '92%',
+                              maxWidth: '48%',
+                              ...(productImagePos === 'center'
+                                ? { left: '50%', transform: 'translate(-50%, -50%)' }
+                                : productImagePos === 'right'
+                                  ? { right: '1%', transform: 'translateY(-50%)' }
+                                  : { left: '1%', transform: 'translateY(-50%)' }),
+                            }}>
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={productImageDataUrl} alt="商品画像" className="max-h-full max-w-full object-contain" />
+                          </div>
+                        </>
                       )}
                     </div>
 

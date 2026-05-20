@@ -20,6 +20,7 @@ type RequestBody = {
   designStyle?: string
   productImageBase64?: string
   productImageMimeType?: string
+  productBgColor?: string
 }
 
 // ─── デザインスタイル → プロンプト変換 ────────────────────────────────────────
@@ -243,6 +244,7 @@ function buildPrompt(input: {
   pageHints?: string
   hasProductImage?: boolean
   productImageAnalysis?: string
+  productBgColor?: string
 }): string {
   const colorDesc = hexToColorDescription(input.color)
   const categoryStyle = CATEGORY_STYLE[input.category] ?? CATEGORY_STYLE['その他']
@@ -251,20 +253,18 @@ function buildPrompt(input: {
 
   // 商品画像あり → 背景だけ生成するモード
   if (input.hasProductImage) {
-    const textSide = (input.textPosition ?? 'bottom-left').includes('left') ? 'left' : 'right'
-    const productSide = textSide === 'left' ? 'right' : 'left'
+    const productSide = (input.textPosition ?? 'bottom-left').includes('left') ? 'right' : 'left'
+    const bgColor = input.productBgColor ?? '#f5f5f5'
     return [
-      `BANNER BACKGROUND ONLY: Generate an abstract atmospheric commercial banner background for "${input.productName}". The actual product photograph will be composited onto the ${productSide} side in post-production. DO NOT draw any product, object, package, bottle, bag, box, or merchandise — generate BACKGROUND ENVIRONMENT ONLY.`,
-      `TARGET AUDIENCE: "${input.target}".`,
-      stylePrompt ? `VISUAL STYLE: ${stylePrompt}` : `CATEGORY ATMOSPHERE: ${categoryStyle}`,
-      input.productImageAnalysis ? `PRODUCT COLOR & MOOD REFERENCE: ${input.productImageAnalysis}. Design the background to perfectly complement these product aesthetics.` : '',
+      `COMMERCIAL BANNER BACKGROUND: Create a clean abstract atmospheric background for a "${input.productName}" product banner. The actual product photo is composited separately in post-production. Generate BACKGROUND ENVIRONMENT ONLY — no products, no objects, no merchandise.`,
+      `TARGET: "${input.target}".`,
+      stylePrompt ? `VISUAL STYLE: ${stylePrompt}` : `ATMOSPHERE: ${categoryStyle}`,
+      input.productImageAnalysis ? `COLOR REFERENCE: ${input.productImageAnalysis}` : '',
       input.pageHints ? input.pageHints : '',
-      `DOMINANT BACKGROUND COLOR: ${colorDesc}. Build the entire color composition around this palette.`,
-      `SPATIAL COMPOSITION: ${productSide} half of the frame — atmospheric gradient transitioning to complement product placement. ${textSide} half — clean simple area (${spaceDesc}) reserved for Japanese text overlay with minimal texture.`,
-      `BACKGROUND ELEMENTS ONLY: Soft bokeh light spheres, gentle gradients, subtle texture, elegant light rays or patterns. Abstract and minimal. No recognizable objects, no faces, no people.`,
-      `NEGATIVE SPACE: 35% clean uncluttered area in ${spaceDesc} for text overlay.`,
-      `TECHNICAL: 8K resolution, professional studio lighting atmosphere, premium contemporary color grade.`,
-      'ABSOLUTE RULES: No text, no numbers, no logos, no products, no merchandise, no human faces in the generated image.',
+      `GRADIENT COMPOSITION: Smooth horizontal gradient — ${productSide === 'right' ? 'left 55%' : 'right 55%'} is ${colorDesc} with soft atmospheric bokeh and gentle light. ${productSide} 45% gradually transitions to the exact color ${bgColor} to seamlessly receive the product composite. Smooth natural fade between zones, zero hard edge.`,
+      `VISUAL ELEMENTS: Soft bokeh spheres of light, gentle gradients, subtle atmospheric glow. Abstract and minimal. No faces, no people, no objects of any kind.`,
+      `TECHNICAL: 8K resolution, professional studio quality, premium contemporary color grade.`,
+      `ABSOLUTE CRITICAL: ZERO TEXT. ZERO TYPOGRAPHY. ZERO CHARACTERS. ZERO NUMBERS. ZERO LETTERS. ZERO JAPANESE CHARACTERS. ZERO WORDS. The image must contain exclusively visual elements — colors, light, gradients, bokeh only. Any typographic element constitutes automatic failure.`,
     ].filter(Boolean).join(' ')
   }
 
@@ -351,7 +351,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'リクエストの形式が不正です' }, { status: 400 })
   }
 
-  const { productName, category, target, catchcopy, color, size, textPosition, referenceUrl, designStyle, productImageBase64, productImageMimeType } = body
+  const { productName, category, target, catchcopy, color, size, textPosition, referenceUrl, designStyle, productImageBase64, productImageMimeType, productBgColor } = body
 
   if (!productName?.trim() || !target?.trim() || !catchcopy?.trim()) {
     return NextResponse.json({ error: '商品名・ターゲット・訴求テキストは必須です' }, { status: 400 })
@@ -365,7 +365,7 @@ export async function POST(req: NextRequest) {
     hasProductImage ? analyzeProductImage(ai, productImageBase64!, productImageMimeType!) : Promise.resolve(''),
   ])
 
-  const prompt = buildPrompt({ productName, category, target, catchcopy, color, textPosition, designStyle, pageHints, hasProductImage, productImageAnalysis })
+  const prompt = buildPrompt({ productName, category, target, catchcopy, color, textPosition, designStyle, pageHints, hasProductImage, productImageAnalysis, productBgColor })
   const reasoning = buildReasoning({ productName, category, target, catchcopy, color, textPosition, designStyle, referenceUrl })
   const aspectRatio = toImagenAspectRatio(size.width, size.height)
 
