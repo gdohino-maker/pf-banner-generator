@@ -166,6 +166,8 @@ async function renderToCanvas(
   fontStyleId: FontStyleId,
   stampId: string | null,
   stampPosition: StampPosition,
+  productImageDataUrl: string | null = null,
+  productImagePos: 'left' | 'center' | 'right' = 'right',
 ): Promise<HTMLCanvasElement> {
   const { width: cw, height: ch } = img.size
   const canvas = document.createElement('canvas')
@@ -189,7 +191,10 @@ async function renderToCanvas(
     const padding = Math.round(Math.max(20, cw * 0.035))
     const maxTextWidth = cw * 0.60
 
-    try { await document.fonts.load(`bold ${fontSize}px "${fontStyle.id === 'gothic' ? 'Noto Sans JP' : 'Shippori Mincho'}"`) } catch { /* fallback */ }
+    try {
+      await document.fonts.ready
+      await document.fonts.load(`bold ${fontSize}px "${fontStyle.id === 'gothic' ? 'Noto Sans JP' : 'Shippori Mincho'}"`)
+    } catch { /* fallback */ }
 
     ctx.font = `bold ${fontSize}px ${fontStyle.canvasStack}`
     ctx.textBaseline = 'alphabetic'
@@ -239,6 +244,21 @@ async function renderToCanvas(
       const stampImg = await loadImage(svgToDataUrl(stamp.svg))
       ctx.drawImage(stampImg, sx2, sy2, stampSize, stampSize)
     }
+  }
+
+  if (productImageDataUrl) {
+    const prodImg = await loadImage(productImageDataUrl)
+    const maxH = ch * 0.88
+    const maxW = cw * 0.42
+    const scale = Math.min(maxW / prodImg.naturalWidth, maxH / prodImg.naturalHeight, 1.0)
+    const pw = Math.round(prodImg.naturalWidth * scale)
+    const ph = Math.round(prodImg.naturalHeight * scale)
+    let px2 = 0
+    if (productImagePos === 'right') px2 = cw - pw - Math.round(cw * 0.02)
+    else if (productImagePos === 'center') px2 = Math.round((cw - pw) / 2)
+    else px2 = Math.round(cw * 0.02)
+    const py2 = Math.round((ch - ph) / 2)
+    ctx.drawImage(prodImg, px2, py2, pw, ph)
   }
 
   return canvas
@@ -317,6 +337,8 @@ export default function BannerGenerator() {
   const [showReasoning, setShowReasoning] = useState(false)
   const [feedback, setFeedback] = useState<'good' | 'bad' | null>(null)
   const [isDownloading, setIsDownloading] = useState(false)
+  const [productImageDataUrl, setProductImageDataUrl] = useState<string | null>(null)
+  const [productImagePos, setProductImagePos] = useState<'left' | 'center' | 'right'>('right')
   const progressRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   // ─── バリデーション ─────────────────────────────────────────────────────────
@@ -397,6 +419,7 @@ export default function BannerGenerator() {
     setGeneratedImage(null)
     setGenerateError(null)
     setFeedback(null)
+    setProductImageDataUrl(null)
     stopProgress(0)
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
@@ -406,7 +429,7 @@ export default function BannerGenerator() {
     if (!generatedImage) return
     setIsDownloading(true)
     try {
-      const canvas = await renderToCanvas(generatedImage, form.appealText, overlay, fontStyleId, activeStamp, stampPosition)
+      const canvas = await renderToCanvas(generatedImage, form.appealText, overlay, fontStyleId, activeStamp, stampPosition, productImageDataUrl, productImagePos)
       canvas.toBlob(blob => {
         if (!blob) return
         const url = URL.createObjectURL(blob)
@@ -417,7 +440,7 @@ export default function BannerGenerator() {
         URL.revokeObjectURL(url)
       }, 'image/jpeg', 0.93)
     } finally { setIsDownloading(false) }
-  }, [generatedImage, form.appealText, overlay, fontStyleId, activeStamp, stampPosition])
+  }, [generatedImage, form.appealText, overlay, fontStyleId, activeStamp, stampPosition, productImageDataUrl, productImagePos])
 
   const downloadRaw = () => {
     if (!generatedImage) return
@@ -612,6 +635,52 @@ export default function BannerGenerator() {
                   </p>
                 </div>
 
+                {/* 商品画像アップロード */}
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">
+                    商品画像
+                    <span className="ml-2 text-[10px] font-normal text-slate-400 border border-slate-200 rounded-full px-2 py-0.5">任意</span>
+                  </label>
+                  <label className="flex flex-col items-center justify-center w-full h-28 border-2 border-dashed rounded-xl cursor-pointer transition-all relative overflow-hidden"
+                    style={{ borderColor: productImageDataUrl ? '#fca5a5' : '#e2e8f0', background: productImageDataUrl ? '#fff1f2' : 'white' }}>
+                    {productImageDataUrl ? (
+                      <>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={productImageDataUrl} alt="商品画像プレビュー" className="h-full w-full object-contain p-2" />
+                        <div className="absolute inset-0 bg-black/0 hover:bg-black/25 transition-colors flex items-center justify-center opacity-0 hover:opacity-100">
+                          <span className="text-white text-xs font-bold bg-black/40 px-3 py-1 rounded-full">変更</span>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="flex flex-col items-center gap-1.5 text-slate-400 pointer-events-none">
+                        <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                        <span className="text-xs font-medium">クリックして画像を選択</span>
+                        <span className="text-[10px]">PNG / JPG / WEBP</span>
+                      </div>
+                    )}
+                    <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" className="hidden"
+                      onChange={e => {
+                        const file = e.target.files?.[0]
+                        if (!file) return
+                        const reader = new FileReader()
+                        reader.onload = ev => setProductImageDataUrl(ev.target?.result as string)
+                        reader.readAsDataURL(file)
+                        e.target.value = ''
+                      }} />
+                  </label>
+                  {productImageDataUrl && (
+                    <button onClick={() => setProductImageDataUrl(null)}
+                      className="mt-1.5 text-xs text-slate-400 hover:text-red-500 transition-colors">
+                      画像を削除
+                    </button>
+                  )}
+                  <p className="text-[11px] text-slate-400 mt-1.5 leading-relaxed">
+                    アップロードした画像がバナーに合成されます（デザイン乖離を防止）
+                  </p>
+                </div>
+
                 {/* デザインスタイル */}
                 <div>
                   <label className="block text-sm font-semibold text-slate-700 mb-2.5">
@@ -803,6 +872,27 @@ export default function BannerGenerator() {
                       </div>
                       <p className="text-[10px] text-slate-400 mt-1.5">プレビューと書き出し両方に反映されます</p>
                     </div>
+
+                    {/* 商品画像の配置 */}
+                    {productImageDataUrl && (
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-600 mb-2">商品画像の配置</label>
+                        <div className="grid grid-cols-3 gap-1.5">
+                          {([
+                            { value: 'left',   label: '左' },
+                            { value: 'center', label: '中央' },
+                            { value: 'right',  label: '右' },
+                          ] as const).map(opt => (
+                            <button key={opt.value} onClick={() => setProductImagePos(opt.value)}
+                              className={`py-2.5 text-xs font-medium rounded-xl border transition-all
+                                ${productImagePos === opt.value ? 'border-blue-400 text-blue-700' : 'border-slate-200 text-slate-500 hover:bg-slate-50'}`}
+                              style={productImagePos === opt.value ? { background: 'linear-gradient(135deg, #eff6ff, #dbeafe)' } : {}}>
+                              {opt.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {/* 右列：スタンプ & サイズ */}
@@ -1043,6 +1133,24 @@ export default function BannerGenerator() {
                         <div className="absolute pointer-events-none" style={{ width: '22%', ...stampPositionStyle[stampPosition] }}>
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img src={svgToDataUrl(activeStampObj.svg)} alt={activeStampObj.label} className="w-full h-auto drop-shadow-lg" />
+                        </div>
+                      )}
+
+                      {/* 商品画像オーバーレイ */}
+                      {productImageDataUrl && (
+                        <div className="absolute pointer-events-none flex items-center"
+                          style={{
+                            top: '50%',
+                            maxHeight: '88%',
+                            maxWidth: '42%',
+                            ...(productImagePos === 'center'
+                              ? { left: '50%', transform: 'translate(-50%, -50%)' }
+                              : productImagePos === 'right'
+                                ? { right: '2%', transform: 'translateY(-50%)' }
+                                : { left: '2%', transform: 'translateY(-50%)' }),
+                          }}>
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={productImageDataUrl} alt="商品画像" className="max-h-full max-w-full object-contain drop-shadow-2xl" />
                         </div>
                       )}
                     </div>
