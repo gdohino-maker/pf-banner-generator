@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { GoogleGenAI } from '@google/genai'
 
 export const maxDuration = 60
 
-const POLLINATIONS_BASE = 'https://image.pollinations.ai/prompt'
+const MODEL = 'imagen-4.0-generate-001'
 
 // ─── 型定義 ───────────────────────────────────────────────────────────────────
 export type ReasoningPoint = { icon: string; title: string; body: string }
@@ -15,6 +16,16 @@ type RequestBody = {
   color: string
   size: { label: string; width: number; height: number }
   textPosition?: string
+}
+
+// ─── Imagen 4 サポートアスペクト比へのマッピング ─────────────────────────────
+function toImagenAspectRatio(width: number, height: number): string {
+  const ratio = width / height
+  if (ratio >= 1.6) return '16:9'
+  if (ratio >= 1.2) return '4:3'
+  if (ratio >= 0.84) return '1:1'
+  if (ratio >= 0.6) return '3:4'
+  return '9:16'
 }
 
 // ─── Hex → 自然言語カラー名（英語プロンプト用）────────────────────────────────
@@ -104,66 +115,6 @@ function textPositionToSpaceDesc(pos: string): string {
   return map[pos] ?? 'lower-left or left side of the frame'
 }
 
-// ─── Flux専用：カテゴリ別ビジュアルスタイル（短く・英語・視覚優先）────────────
-const FLUX_CATEGORY_STYLE: Record<string, string> = {
-  '食品・飲料': 'food photography, steam rising, glistening droplets, rich texture, dark moody studio lighting, macro detail, sizzle effect, appetizing, bokeh background',
-  '美容・コスメ': 'luxury beauty product photography, white marble surface, soft butterfly lighting, elegant glow, minimal clean background, premium',
-  'ファッション': 'editorial fashion photography, crisp white studio backdrop, sharp fabric texture, boutique aesthetic, magazine quality',
-  '家電・PC': 'technology product photography, dark reflective surface, geometric angles, specular highlights, minimalist modern, sleek',
-  'スポーツ・アウトドア': 'sports product photography, high contrast bold colors, energetic dynamic composition, outdoor lifestyle, action',
-  'インテリア・家具': 'interior design photography, warm ambient lighting, scandinavian minimalist, natural wood grain, cozy lifestyle',
-  'ベビー・マタニティ': 'baby product photography, soft pastel colors, gentle diffused light, clean white background, nurturing safe',
-  'その他': 'commercial product photography, crisp studio lighting, clean background, professional presentation',
-}
-
-// カテゴリの英語アンカー（Fluxが日本語商品名を認識できない場合の補完）
-const FLUX_CATEGORY_EN: Record<string, string> = {
-  '食品・飲料': 'food and beverage',
-  '美容・コスメ': 'beauty cosmetics product',
-  'ファッション': 'fashion apparel clothing',
-  '家電・PC': 'electronics technology device',
-  'スポーツ・アウトドア': 'sports outdoor equipment',
-  'インテリア・家具': 'interior furniture home decor',
-  'ベビー・マタニティ': 'baby maternity product',
-  'その他': 'retail product',
-}
-
-// ─── Flux最適化プロンプト（Pollinations.ai専用）───────────────────────────────
-// Fluxは「商品名を先頭・短く・英語の視覚語を多用」するプロンプトが最も効く
-function buildFluxPrompt(input: {
-  productName: string
-  category: string
-  target: string
-  color: string
-  textPosition?: string
-}): string {
-  const colorDesc = hexToColorDescription(input.color)
-  const catStyle = FLUX_CATEGORY_STYLE[input.category] ?? FLUX_CATEGORY_STYLE['その他']
-  const catEn = FLUX_CATEGORY_EN[input.category] ?? 'product'
-
-  // 商品を配置すべきエリアと空けるエリアを簡潔に指示
-  const spaceMap: Record<string, string> = {
-    'bottom-left':   'subject positioned in right-center area, large empty clean space on lower-left third',
-    'bottom-center': 'subject positioned in upper-center, large empty clean space at the bottom',
-    'bottom-right':  'subject positioned in left-center area, large empty clean space on lower-right third',
-    'top-left':      'subject positioned in right-center area, empty clean space on upper-left',
-    'top-center':    'subject positioned in lower-center, empty clean space at the top',
-    'top-right':     'subject positioned in left-center area, empty clean space on upper-right',
-  }
-  const spaceInstr = spaceMap[input.textPosition ?? 'bottom-left']
-
-  return [
-    // 先頭に商品名＋英語カテゴリアンカー（Fluxは先頭トークンを最も重視）
-    `${input.productName}, ${catEn}`,
-    catStyle,
-    `${colorDesc} dominant color scheme`,
-    spaceInstr,
-    'highly detailed sharp focus',
-    'no text no watermarks no logos no letters no numbers',
-    'photorealistic 8k commercial photography',
-  ].join(', ')
-}
-
 // ─── 楽天EC バナー制作 20の鉄則 ──────────────────────────────────────────────
 const RAKUTEN_BANNER_RULES = [
   'Main product clearly visible and occupying at least 55% of the frame',
@@ -188,7 +139,7 @@ const RAKUTEN_BANNER_RULES = [
   'ABSOLUTE: No promotional badges sale stickers or AI-generated overlay graphics',
 ]
 
-// ─── プロンプト構築（20鉄則組み込み）─────────────────────────────────────────
+// ─── プロンプト構築（Imagen 4用 · 20鉄則組み込み）───────────────────────────
 function buildPrompt(input: {
   productName: string
   category: string
@@ -259,22 +210,16 @@ function buildReasoning(input: {
   ]
 }
 
-// ─── 画像フェッチ共通処理 ────────────────────────────────────────────────────
-async function fetchImageAsBase64(
-  url: string,
-  timeoutMs = 50_000,
-): Promise<{ base64: string; contentType: string }> {
-  const res = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) })
-  if (!res.ok) throw new Error(`HTTP ${res.status} from ${url}`)
-  const buf = await res.arrayBuffer()
-  return {
-    base64: Buffer.from(buf).toString('base64'),
-    contentType: res.headers.get('content-type') || 'image/jpeg',
-  }
-}
-
 // ─── POST ハンドラー ──────────────────────────────────────────────────────────
 export async function POST(req: NextRequest) {
+  const apiKey = process.env.GEMINI_API_KEY
+  if (!apiKey || apiKey === 'your_api_key_here') {
+    return NextResponse.json(
+      { error: 'GEMINI_API_KEY が設定されていません。.env.local または Vercel の環境変数を確認してください。' },
+      { status: 503 }
+    )
+  }
+
   let body: RequestBody
   try {
     body = await req.json()
@@ -289,37 +234,40 @@ export async function POST(req: NextRequest) {
   }
 
   const prompt = buildPrompt({ productName, category, target, catchcopy, color, textPosition })
-  const fluxPrompt = buildFluxPrompt({ productName, category, target, color, textPosition })
   const reasoning = buildReasoning({ productName, category, target, catchcopy, color, textPosition })
+  const aspectRatio = toImagenAspectRatio(size.width, size.height)
 
-  const seed = Math.floor(Math.random() * 1_000_000)
-  let imageData: { base64: string; contentType: string }
-  let imageSource = 'pollinations'
-
-  // ── 1st try: Pollinations.ai（Flux最適化プロンプト）──
   try {
-    const pUrl =
-      `${POLLINATIONS_BASE}/${encodeURIComponent(fluxPrompt)}` +
-      `?width=${size.width}&height=${size.height}&nologo=true&seed=${seed}`
-    imageData = await fetchImageAsBase64(pUrl, 45_000)
-  } catch (err) {
-    // ── fallback: Picsum Photos（確実にダミー画像を返す）──
-    console.warn('[generate] Pollinations failed, falling back to Picsum:', err)
-    imageSource = 'picsum'
-    try {
-      const picsumUrl = `https://picsum.photos/${size.width}/${size.height}?random=${seed}`
-      imageData = await fetchImageAsBase64(picsumUrl, 15_000)
-    } catch (fallbackErr) {
-      console.error('[generate] All image sources failed:', fallbackErr)
-      return NextResponse.json({ error: '画像の取得に失敗しました。ネットワーク接続を確認してください。' }, { status: 502 })
-    }
-  }
+    const ai = new GoogleGenAI({ apiKey })
 
-  return NextResponse.json({
-    imageDataUrl: `data:${imageData.contentType};base64,${imageData.base64}`,
-    usedAspectRatio: '',
-    imageSource,
-    prompt,
-    reasoning,
-  })
+    const response = await ai.models.generateImages({
+      model: MODEL,
+      prompt,
+      config: {
+        numberOfImages: 1,
+        aspectRatio,
+        outputMimeType: 'image/jpeg',
+      },
+    })
+
+    const imageBytes = response.generatedImages?.[0]?.image?.imageBytes
+    if (!imageBytes) {
+      return NextResponse.json(
+        { error: '画像が生成されませんでした。コンテンツポリシーに抵触した可能性があります。' },
+        { status: 422 }
+      )
+    }
+
+    return NextResponse.json({
+      imageDataUrl: `data:image/jpeg;base64,${imageBytes}`,
+      usedAspectRatio: aspectRatio,
+      imageSource: 'imagen4',
+      prompt,
+      reasoning,
+    })
+  } catch (err) {
+    console.error('[generate] Imagen 4 error:', err)
+    const msg = err instanceof Error ? err.message : String(err)
+    return NextResponse.json({ error: `Imagen 4 エラー: ${msg}` }, { status: 502 })
+  }
 }
