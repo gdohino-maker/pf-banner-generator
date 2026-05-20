@@ -228,8 +228,8 @@ const RAKUTEN_BANNER_RULES = [
   'Professional trustworthy appearance matching Rakuten Ichiba standards',
   'Visual tone and color temperature tuned to the target demographic',
   'Emotional resonance with target audience primary desire or aspiration',
-  'ABSOLUTE: No text letters numbers price tags logos or watermarks anywhere',
-  'ABSOLUTE: No promotional badges sale stickers or AI-generated overlay graphics',
+  'ABSOLUTE RULE: ZERO text ZERO letters ZERO numbers ZERO Japanese characters ZERO logos ZERO watermarks ZERO labels ZERO signs anywhere in the image — only photographic visual content is allowed',
+  'ABSOLUTE RULE: ZERO promotional badges ZERO sale stickers ZERO price tags ZERO AI-generated overlay graphics ZERO typography of any kind',
 ]
 
 // ─── プロンプト構築（Imagen 4用 · 20鉄則組み込み）───────────────────────────
@@ -277,7 +277,8 @@ function buildPrompt(input: {
     `TECHNICAL: 8K resolution photorealistic sharp focus professional studio lighting. Premium contemporary color grade.`,
     `COLOR THEME: Dominant accent and background color must be ${colorDesc}. Use this color as intentional design element throughout.`,
     `EC RULES (all 20 must be satisfied): ${RAKUTEN_BANNER_RULES.join(' | ')}`,
-    `NEGATIVE SPACE — CRITICAL REQUIREMENT: Reserve a clean uncluttered area of exactly 35% of the total frame in the ${spaceDesc}. This area receives Japanese advertising text ("${input.catchcopy}") overlaid in post-production. Must have simple texture only — gradient solid color or soft bokeh. Position ALL visual interest AWAY from this reserved area.`,
+    `NEGATIVE SPACE — CRITICAL REQUIREMENT: Reserve a completely clean and empty area of exactly 35% of the total frame in the ${spaceDesc}. This zone must contain ONLY a simple gradient, solid color, or soft bokeh — absolutely nothing else. Position ALL visual interest entirely AWAY from this reserved zone.`,
+    `ABSOLUTE — HIGHEST PRIORITY: ZERO text. ZERO letters. ZERO numbers. ZERO Japanese characters. ZERO Korean characters. ZERO Chinese characters. ZERO words. ZERO typography. ZERO price tags. ZERO logos. ZERO watermarks. ZERO labels. ZERO signs. The image must contain exclusively photographic visual elements. Any character or typographic element anywhere in the image is an automatic critical failure.`,
   ].filter(Boolean).join(' ')
 }
 
