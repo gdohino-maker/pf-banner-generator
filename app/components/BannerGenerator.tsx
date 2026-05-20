@@ -217,30 +217,35 @@ const STEPS = [
 
 function StepIndicator({ current }: { current: number }) {
   return (
-    <div className="flex items-center justify-center mb-8">
+    <div className="flex items-center justify-center mb-10">
       {STEPS.map((s, i) => (
         <div key={s.num} className="flex items-center">
-          <div className="flex flex-col items-center">
-            <div className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold border-2 transition-all duration-300
+          <div className="flex flex-col items-center gap-2">
+            <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm transition-all duration-300
               ${current > s.num
-                ? 'bg-emerald-500 border-emerald-500 text-white'
+                ? 'bg-emerald-500 text-white shadow-md shadow-emerald-200'
                 : current === s.num
-                  ? 'bg-red-600 border-red-600 text-white shadow-lg shadow-red-200'
-                  : 'bg-white border-gray-300 text-gray-400'}`}>
+                  ? 'text-white shadow-lg shadow-red-200'
+                  : 'bg-white border-2 border-slate-200 text-slate-400'}`}
+              style={current === s.num ? { background: 'linear-gradient(135deg, #dc2626, #e11d48)' } : {}}>
               {current > s.num ? (
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
                 </svg>
               ) : s.num}
             </div>
-            <span className={`text-xs mt-1.5 font-medium whitespace-nowrap transition-colors
-              ${current === s.num ? 'text-gray-900' : current > s.num ? 'text-emerald-600' : 'text-gray-400'}`}>
+            <span className={`text-xs font-semibold whitespace-nowrap transition-colors
+              ${current === s.num ? 'text-slate-900' : current > s.num ? 'text-emerald-600' : 'text-slate-400'}`}>
               {s.label}
             </span>
           </div>
           {i < STEPS.length - 1 && (
-            <div className={`w-16 sm:w-24 h-0.5 mx-2 mb-5 transition-colors duration-300
-              ${current > i + 1 ? 'bg-emerald-400' : 'bg-gray-200'}`} />
+            <div className="w-16 sm:w-24 h-px mx-3 mb-5 transition-all duration-500 rounded-full"
+              style={{
+                background: current > i + 1
+                  ? 'linear-gradient(90deg, #10b981, #34d399)'
+                  : '#e2e8f0',
+              }} />
           )}
         </div>
       ))}
@@ -423,36 +428,46 @@ export default function BannerGenerator() {
   const currentProgressStep = progress < 30 ? 0 : progress < 70 ? 1 : 2
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
+    <div className="min-h-screen flex flex-col" style={{ background: 'linear-gradient(160deg, #f8fafc 0%, #f1f5f9 60%, #e8edf5 100%)' }}>
+
+      {/* ドットグリッド背景 */}
+      <div className="fixed inset-0 pointer-events-none"
+        style={{ backgroundImage: 'radial-gradient(circle, rgba(148,163,184,0.18) 1px, transparent 1px)', backgroundSize: '28px 28px', zIndex: 0 }} />
 
       {/* ヘッダー */}
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-50">
-        <div className="max-w-5xl mx-auto px-6 h-14 flex items-center justify-between">
+      <header className="sticky top-0 z-50 border-b border-white/60"
+        style={{ background: 'rgba(255,255,255,0.88)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)' }}>
+        {/* 上部グラデーションライン */}
+        <div className="h-0.5 w-full" style={{ background: 'linear-gradient(90deg, #dc2626, #e11d48, #f43f5e, #dc2626)' }} />
+        <div className="max-w-5xl mx-auto px-5 sm:px-8 h-15 flex items-center justify-between" style={{ height: '60px' }}>
           <div className="flex items-center gap-3">
-            <div className="w-7 h-7 rounded-lg bg-red-600 flex items-center justify-center flex-shrink-0">
-              <span className="text-white text-xs font-bold">PF</span>
+            <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0"
+              style={{ background: 'linear-gradient(135deg, #dc2626, #be123c)' }}>
+              <span className="text-white text-xs font-black tracking-tight">PF</span>
             </div>
             <div>
-              <p className="text-sm font-semibold text-gray-900 leading-none">PFクリエイティブ生成</p>
-              <p className="text-[11px] text-gray-400 mt-0.5 leading-none hidden sm:block">楽天バナー・商品画像 AI生成ツール</p>
+              <p className="text-sm font-bold text-slate-900 leading-none tracking-tight">PFクリエイティブ生成</p>
+              <p className="text-[10px] text-slate-400 mt-0.5 leading-none hidden sm:block font-medium">楽天バナー・商品画像 AI生成ツール</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
             {step > 1 && (
               <button onClick={resetAll}
-                className="text-xs text-gray-400 hover:text-gray-600 transition-colors">
+                className="text-xs text-slate-400 hover:text-slate-600 font-medium transition-colors px-2 py-1">
                 最初から
               </button>
             )}
-            <span className="text-xs bg-blue-50 text-blue-600 border border-blue-200 rounded-full px-3 py-1 font-medium">
+            <div className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full border"
+              style={{ background: 'linear-gradient(135deg, #eff6ff, #dbeafe)', borderColor: '#bfdbfe', color: '#1d4ed8' }}>
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse flex-shrink-0" />
               Imagen 4
-            </span>
+            </div>
           </div>
         </div>
       </header>
 
       {/* メインコンテンツ */}
-      <main className="flex-1 py-8 px-4 sm:px-6">
+      <main className="flex-1 py-10 px-4 sm:px-6 relative z-10">
 
         {/* ステップインジケーター（ステップ1〜2のみ） */}
         {step <= 2 && (
@@ -464,17 +479,23 @@ export default function BannerGenerator() {
         {/* ══════ STEP 1：商品情報 ══════ */}
         {step === 1 && (
           <div className="max-w-xl mx-auto">
-            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-              <div className="px-8 pt-8 pb-6 border-b border-gray-100">
-                <p className="text-[10px] font-bold text-red-500 uppercase tracking-widest mb-2">STEP 1 / 3</p>
-                <h2 className="text-xl font-bold text-gray-900">商品情報の入力</h2>
-                <p className="text-sm text-gray-500 mt-1">AIが最適なバナーを設計するための情報を入力してください</p>
+            <div className="bg-white overflow-hidden" style={{ borderRadius: '20px', boxShadow: '0 0 0 1px rgba(15,23,42,0.06), 0 4px 6px -1px rgba(15,23,42,0.06), 0 20px 40px -8px rgba(15,23,42,0.10)' }}>
+              {/* 上部カラーバー */}
+              <div className="h-1" style={{ background: 'linear-gradient(90deg, #dc2626, #e11d48, #fb7185)' }} />
+
+              <div className="px-8 pt-7 pb-6 border-b border-slate-100">
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-[9px] font-black tracking-[0.18em] uppercase px-2 py-0.5 rounded-full"
+                    style={{ background: 'linear-gradient(135deg, #fff1f2, #ffe4e6)', color: '#be123c' }}>STEP 1 / 3</span>
+                </div>
+                <h2 className="text-xl font-bold text-slate-900 tracking-tight">商品情報の入力</h2>
+                <p className="text-sm text-slate-500 mt-1 leading-relaxed">AIが最適なバナーを設計するための情報を入力してください</p>
               </div>
 
               <div className="px-8 py-7 space-y-5">
                 {/* 商品名 */}
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">
                     商品名 <span className="text-red-500">*</span>
                   </label>
                   <input type="text" value={form.productName}
@@ -483,16 +504,16 @@ export default function BannerGenerator() {
                     className={`w-full px-4 py-3 text-sm rounded-xl border outline-none transition-all
                       ${errors.productName
                         ? 'border-red-400 bg-red-50 focus:ring-2 focus:ring-red-100'
-                        : 'border-gray-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-50'}`}
+                        : 'border-slate-200 bg-white focus:border-red-400 focus:ring-2 focus:ring-red-50'}`}
                   />
                   {errors.productName && <p className="text-red-500 text-xs mt-1.5">{errors.productName}</p>}
                 </div>
 
                 {/* カテゴリ */}
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1.5">カテゴリ</label>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">カテゴリ</label>
                   <select value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}
-                    className="w-full px-4 py-3 text-sm rounded-xl border border-gray-200 bg-white outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-50 transition-all">
+                    className="w-full px-4 py-3 text-sm rounded-xl border border-slate-200 bg-white outline-none focus:border-red-400 focus:ring-2 focus:ring-red-50 transition-all">
                     <option value="">選択してください（任意）</option>
                     {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
@@ -500,7 +521,7 @@ export default function BannerGenerator() {
 
                 {/* ターゲット */}
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">
                     ターゲット <span className="text-red-500">*</span>
                   </label>
                   <input type="text" value={form.target}
@@ -509,14 +530,14 @@ export default function BannerGenerator() {
                     className={`w-full px-4 py-3 text-sm rounded-xl border outline-none transition-all
                       ${errors.target
                         ? 'border-red-400 bg-red-50 focus:ring-2 focus:ring-red-100'
-                        : 'border-gray-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-50'}`}
+                        : 'border-slate-200 bg-white focus:border-red-400 focus:ring-2 focus:ring-red-50'}`}
                   />
                   {errors.target && <p className="text-red-500 text-xs mt-1.5">{errors.target}</p>}
                 </div>
 
                 {/* 訴求テキスト */}
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">
                     訴求テキスト（キャッチコピー）<span className="text-red-500">*</span>
                   </label>
                   <textarea value={form.appealText}
@@ -526,34 +547,48 @@ export default function BannerGenerator() {
                     className={`w-full px-4 py-3 text-sm rounded-xl border outline-none resize-none transition-all
                       ${errors.appealText
                         ? 'border-red-400 bg-red-50 focus:ring-2 focus:ring-red-100'
-                        : 'border-gray-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-50'}`}
+                        : 'border-slate-200 bg-white focus:border-red-400 focus:ring-2 focus:ring-red-50'}`}
                   />
                   {errors.appealText && <p className="text-red-500 text-xs mt-1.5">{errors.appealText}</p>}
                 </div>
 
                 {/* メインカラー */}
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">メインカラー</label>
-                  <div className="flex items-center gap-3">
-                    <input type="color" value={form.mainColor}
-                      onChange={e => setForm(f => ({ ...f, mainColor: e.target.value }))}
-                      className="w-10 h-10 rounded-xl border-2 border-gray-200 cursor-pointer p-0.5 flex-shrink-0" />
-                    <div className="flex gap-2">
+                  <label className="block text-sm font-semibold text-slate-700 mb-2.5">メインカラー</label>
+                  <div className="flex items-center gap-4">
+                    <div className="relative flex-shrink-0">
+                      <input type="color" value={form.mainColor}
+                        onChange={e => setForm(f => ({ ...f, mainColor: e.target.value }))}
+                        className="w-11 h-11 rounded-xl cursor-pointer opacity-0 absolute inset-0" />
+                      <div className="w-11 h-11 rounded-xl border-2 border-slate-200 shadow-sm pointer-events-none"
+                        style={{ backgroundColor: form.mainColor }} />
+                    </div>
+                    <div className="flex gap-2 flex-wrap">
                       {QUICK_COLORS.map(c => (
                         <button key={c} onClick={() => setForm(f => ({ ...f, mainColor: c }))}
-                          className={`w-8 h-8 rounded-full border-2 transition-all hover:scale-110
-                            ${form.mainColor === c ? 'border-gray-800 scale-110 shadow-md' : 'border-transparent'}`}
-                          style={{ backgroundColor: c }} />
+                          className="w-8 h-8 rounded-full transition-all hover:scale-110 focus:outline-none"
+                          style={{
+                            backgroundColor: c,
+                            boxShadow: form.mainColor === c
+                              ? `0 0 0 2px white, 0 0 0 4px ${c}, 0 4px 8px rgba(0,0,0,0.2)`
+                              : '0 1px 3px rgba(0,0,0,0.15)',
+                            transform: form.mainColor === c ? 'scale(1.15)' : 'scale(1)',
+                          }} />
                       ))}
                     </div>
-                    <span className="text-xs text-gray-400 font-mono ml-auto">{form.mainColor}</span>
+                    <span className="text-xs text-slate-400 font-mono ml-auto tracking-wider">{form.mainColor.toUpperCase()}</span>
                   </div>
+                  <p className="text-[11px] text-slate-400 mt-2 leading-relaxed">
+                    選択したカラーをAIへのヒントとして送信します。バナー画像の背景・アクセントカラーに反映されます。
+                  </p>
                 </div>
               </div>
 
-              <div className="px-8 py-5 bg-gray-50 border-t border-gray-100 flex justify-end">
+              <div className="px-8 py-5 border-t border-slate-100 flex justify-end"
+                style={{ background: 'linear-gradient(135deg, #f8fafc, #f1f5f9)' }}>
                 <button onClick={goToStep2}
-                  className="flex items-center gap-2 px-6 py-3 bg-gray-900 hover:bg-gray-700 text-white text-sm font-semibold rounded-xl transition-colors shadow-sm">
+                  className="flex items-center gap-2.5 px-7 py-3 text-white text-sm font-bold rounded-xl transition-all hover:shadow-lg hover:shadow-slate-200 active:scale-95"
+                  style={{ background: 'linear-gradient(135deg, #1e293b, #0f172a)' }}>
                   デザイン設定へ
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -567,35 +602,42 @@ export default function BannerGenerator() {
         {/* ══════ STEP 2：デザイン設定 ══════ */}
         {step === 2 && (
           <div className="max-w-2xl mx-auto">
-            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-              <div className="px-8 pt-8 pb-6 border-b border-gray-100">
-                <p className="text-[10px] font-bold text-blue-500 uppercase tracking-widest mb-2">STEP 2 / 3</p>
-                <h2 className="text-xl font-bold text-gray-900">デザイン設定</h2>
-                <p className="text-sm text-gray-500 mt-1">テキストの配置・フォント・スタンプ・出力サイズを選択します</p>
+            <div className="bg-white overflow-hidden" style={{ borderRadius: '20px', boxShadow: '0 0 0 1px rgba(15,23,42,0.06), 0 4px 6px -1px rgba(15,23,42,0.06), 0 20px 40px -8px rgba(15,23,42,0.10)' }}>
+              {/* 上部カラーバー */}
+              <div className="h-1" style={{ background: 'linear-gradient(90deg, #3b82f6, #6366f1, #8b5cf6)' }} />
+
+              <div className="px-8 pt-7 pb-6 border-b border-slate-100">
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-[9px] font-black tracking-[0.18em] uppercase px-2 py-0.5 rounded-full"
+                    style={{ background: 'linear-gradient(135deg, #eff6ff, #dbeafe)', color: '#1d4ed8' }}>STEP 2 / 3</span>
+                </div>
+                <h2 className="text-xl font-bold text-slate-900 tracking-tight">デザイン設定</h2>
+                <p className="text-sm text-slate-500 mt-1 leading-relaxed">テキストの配置・フォント・スタンプ・出力サイズを選択します</p>
               </div>
 
               <div className="px-8 py-7">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-7">
 
                   {/* 左列：テキスト設定 */}
                   <div className="space-y-5">
-                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">テキスト設定</p>
+                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">テキスト設定</p>
 
                     {/* 横位置 */}
                     <div>
-                      <label className="block text-xs font-semibold text-gray-600 mb-2">横位置</label>
+                      <label className="block text-xs font-semibold text-slate-600 mb-2">横位置</label>
                       <div className="grid grid-cols-3 gap-1.5">
                         {([
-                          { value: 'left',   label: '左寄せ', icon: '▲' },
-                          { value: 'center', label: '中央',   icon: '▲' },
-                          { value: 'right',  label: '右寄せ', icon: '▲' },
+                          { value: 'left',   label: '左寄せ' },
+                          { value: 'center', label: '中央'   },
+                          { value: 'right',  label: '右寄せ' },
                         ] as const).map(opt => (
                           <button key={opt.value} onClick={() => setOverlay(o => ({ ...o, hAlign: opt.value }))}
-                            className={`py-2.5 text-xs rounded-lg border flex flex-col items-center gap-0.5 transition-colors font-medium
+                            className={`py-2.5 text-xs rounded-xl border flex flex-col items-center gap-0.5 transition-all font-medium
                               ${overlay.hAlign === opt.value
-                                ? 'border-blue-500 bg-blue-50 text-blue-700'
-                                : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}>
-                            <span className={`text-[8px] ${opt.value === 'left' ? 'self-start ml-2' : opt.value === 'right' ? 'self-end mr-2' : ''}`}>▬</span>
+                                ? 'border-blue-400 text-blue-700'
+                                : 'border-slate-200 text-slate-500 hover:bg-slate-50'}`}
+                            style={overlay.hAlign === opt.value ? { background: 'linear-gradient(135deg, #eff6ff, #dbeafe)' } : {}}>
+                            <span className={`text-[8px] w-full px-1.5 ${opt.value === 'left' ? 'text-left' : opt.value === 'right' ? 'text-right' : 'text-center'}`}>▬</span>
                             <span>{opt.label}</span>
                           </button>
                         ))}
@@ -604,12 +646,13 @@ export default function BannerGenerator() {
 
                     {/* 縦位置 */}
                     <div>
-                      <label className="block text-xs font-semibold text-gray-600 mb-2">縦位置</label>
+                      <label className="block text-xs font-semibold text-slate-600 mb-2">縦位置</label>
                       <div className="grid grid-cols-2 gap-1.5">
                         {([{ value: 'top', label: '上部' }, { value: 'bottom', label: '下部' }] as const).map(opt => (
                           <button key={opt.value} onClick={() => setOverlay(o => ({ ...o, vAlign: opt.value }))}
-                            className={`py-2.5 text-xs font-medium rounded-lg border transition-colors
-                              ${overlay.vAlign === opt.value ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}>
+                            className={`py-2.5 text-xs font-medium rounded-xl border transition-all
+                              ${overlay.vAlign === opt.value ? 'border-blue-400 text-blue-700' : 'border-slate-200 text-slate-500 hover:bg-slate-50'}`}
+                            style={overlay.vAlign === opt.value ? { background: 'linear-gradient(135deg, #eff6ff, #dbeafe)' } : {}}>
                             {opt.label}
                           </button>
                         ))}
@@ -618,16 +661,17 @@ export default function BannerGenerator() {
 
                     {/* テキストカラー */}
                     <div>
-                      <label className="block text-xs font-semibold text-gray-600 mb-2">テキストカラー</label>
+                      <label className="block text-xs font-semibold text-slate-600 mb-2">テキストカラー</label>
                       <div className="grid grid-cols-2 gap-1.5">
                         {([
-                          { value: 'white', label: '白（縁：黒）', dot: 'bg-white ring-1 ring-gray-300' },
-                          { value: 'black', label: '黒（縁：白）', dot: 'bg-gray-900' },
+                          { value: 'white', label: '白（縁：黒）', dotStyle: { background: 'white', boxShadow: '0 0 0 1.5px #cbd5e1' } },
+                          { value: 'black', label: '黒（縁：白）', dotStyle: { background: '#0f172a' } },
                         ] as const).map(opt => (
                           <button key={opt.value} onClick={() => setOverlay(o => ({ ...o, textColor: opt.value }))}
-                            className={`py-2.5 text-xs font-medium rounded-lg border flex items-center justify-center gap-1.5 transition-colors
-                              ${overlay.textColor === opt.value ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}>
-                            <span className={`w-3.5 h-3.5 rounded-full flex-shrink-0 ${opt.dot}`} />
+                            className={`py-2.5 text-xs font-medium rounded-xl border flex items-center justify-center gap-1.5 transition-all
+                              ${overlay.textColor === opt.value ? 'border-blue-400 text-blue-700' : 'border-slate-200 text-slate-500 hover:bg-slate-50'}`}
+                            style={overlay.textColor === opt.value ? { background: 'linear-gradient(135deg, #eff6ff, #dbeafe)' } : {}}>
+                            <span className="w-3.5 h-3.5 rounded-full flex-shrink-0" style={opt.dotStyle} />
                             {opt.label}
                           </button>
                         ))}
@@ -636,14 +680,15 @@ export default function BannerGenerator() {
 
                     {/* フォントスタイル */}
                     <div>
-                      <label className="block text-xs font-semibold text-gray-600 mb-2">フォントスタイル</label>
+                      <label className="block text-xs font-semibold text-slate-600 mb-2">フォントスタイル</label>
                       <div className="grid grid-cols-2 gap-1.5">
                         {FONT_STYLES.map(fs => (
                           <button key={fs.id} onClick={() => setFontStyleId(fs.id)}
-                            className={`py-2.5 rounded-lg border transition-colors flex flex-col items-center gap-0.5
-                              ${fontStyleId === fs.id ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}>
+                            className={`py-3 rounded-xl border transition-all flex flex-col items-center gap-0.5
+                              ${fontStyleId === fs.id ? 'border-blue-400 text-blue-700' : 'border-slate-200 text-slate-500 hover:bg-slate-50'}`}
+                            style={fontStyleId === fs.id ? { background: 'linear-gradient(135deg, #eff6ff, #dbeafe)' } : {}}>
                             <span className="text-sm font-semibold" style={{ fontFamily: fs.cssVar }}>{fs.label}</span>
-                            <span className="text-[10px] text-gray-400">{fs.desc}</span>
+                            <span className="text-[10px] text-slate-400">{fs.desc}</span>
                           </button>
                         ))}
                       </div>
@@ -652,26 +697,27 @@ export default function BannerGenerator() {
 
                   {/* 右列：スタンプ & サイズ */}
                   <div className="space-y-5">
-                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">スタンプ & サイズ</p>
+                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">スタンプ & サイズ</p>
 
                     {/* スタンプ */}
                     <div>
                       <div className="flex items-center justify-between mb-2">
-                        <label className="text-xs font-semibold text-gray-600">スタンプ素材（任意）</label>
+                        <label className="text-xs font-semibold text-slate-600">スタンプ素材（任意）</label>
                         {activeStamp && (
                           <button onClick={() => setActiveStamp(null)}
-                            className="text-xs text-gray-400 hover:text-gray-600 underline">クリア</button>
+                            className="text-xs text-slate-400 hover:text-slate-600 transition-colors">クリア</button>
                         )}
                       </div>
                       <div className="grid grid-cols-3 gap-1.5 mb-2">
                         {STAMPS.map(stamp => (
                           <button key={stamp.id}
                             onClick={() => setActiveStamp(activeStamp === stamp.id ? null : stamp.id)}
-                            className={`p-1.5 rounded-xl border flex flex-col items-center gap-0.5 transition-all
-                              ${activeStamp === stamp.id ? 'border-blue-500 bg-blue-50 scale-105' : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'}`}>
+                            className={`p-2 rounded-xl border flex flex-col items-center gap-1 transition-all
+                              ${activeStamp === stamp.id ? 'border-blue-400 scale-105 shadow-sm' : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'}`}
+                            style={activeStamp === stamp.id ? { background: 'linear-gradient(135deg, #eff6ff, #dbeafe)' } : {}}>
                             {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img src={svgToDataUrl(stamp.svg)} alt={stamp.label} className="w-9 h-9" />
-                            <span className="text-[10px] text-gray-500 leading-tight text-center">{stamp.label}</span>
+                            <span className="text-[10px] text-slate-500 leading-tight text-center">{stamp.label}</span>
                           </button>
                         ))}
                       </div>
@@ -679,8 +725,9 @@ export default function BannerGenerator() {
                         <div className="grid grid-cols-2 gap-1.5">
                           {STAMP_POSITIONS.map(pos => (
                             <button key={pos.id} onClick={() => setStampPosition(pos.id)}
-                              className={`py-1.5 text-xs font-medium rounded-lg border transition-colors
-                                ${stampPosition === pos.id ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}>
+                              className={`py-1.5 text-xs font-medium rounded-xl border transition-all
+                                ${stampPosition === pos.id ? 'border-blue-400 text-blue-700' : 'border-slate-200 text-slate-500 hover:bg-slate-50'}`}
+                              style={stampPosition === pos.id ? { background: 'linear-gradient(135deg, #eff6ff, #dbeafe)' } : {}}>
                               {pos.label}
                             </button>
                           ))}
@@ -703,12 +750,11 @@ export default function BannerGenerator() {
                                   onChange={() => setSelectedSizeIdx(idx)}
                                   className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />
                                 <div className="flex-1 min-w-0">
-                                  <p className="text-xs font-medium text-gray-800 truncate">{size.label}</p>
+                                  <p className="text-xs font-medium text-slate-800 truncate">{size.label}</p>
                                 </div>
-                                <div className="rounded border border-gray-300 bg-gray-100 flex-shrink-0"
-                                  style={{
-                                    width: `${Math.min(36, (size.width / size.height) * 14)}px`,
-                                    height: `${Math.min(14, (size.height / size.width) * 36)}px`,
+                                <div className="rounded-md flex-shrink-0" style={{ background: 'linear-gradient(135deg, #e2e8f0, #f1f5f9)',
+                                    width: `${Math.min(38, (size.width / size.height) * 15)}px`,
+                                    height: `${Math.min(15, (size.height / size.width) * 38)}px`,
                                   }} />
                               </label>
                             ))}
@@ -720,16 +766,18 @@ export default function BannerGenerator() {
                 </div>
               </div>
 
-              <div className="px-8 py-5 bg-gray-50 border-t border-gray-100 flex items-center justify-between">
+              <div className="px-8 py-5 border-t border-slate-100 flex items-center justify-between"
+                style={{ background: 'linear-gradient(135deg, #f8fafc, #f1f5f9)' }}>
                 <button onClick={backToStep1}
-                  className="flex items-center gap-1.5 px-4 py-2.5 text-sm text-gray-500 border border-gray-200 rounded-xl hover:bg-white transition-colors">
+                  className="flex items-center gap-1.5 px-4 py-2.5 text-sm text-slate-500 border border-slate-200 rounded-xl hover:bg-white transition-all bg-white">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                   </svg>
                   戻る
                 </button>
                 <button onClick={goToStep3}
-                  className="flex items-center gap-2 px-7 py-3 bg-red-600 hover:bg-red-700 text-white text-sm font-bold rounded-xl transition-colors shadow-sm shadow-red-200">
+                  className="flex items-center gap-2.5 px-7 py-3 text-white text-sm font-bold rounded-xl transition-all hover:shadow-lg hover:shadow-red-200 active:scale-95"
+                  style={{ background: 'linear-gradient(135deg, #dc2626, #be123c)' }}>
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                   </svg>
@@ -746,28 +794,42 @@ export default function BannerGenerator() {
 
             {/* ローディング */}
             {isGenerating && (
-              <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-10 text-center">
-                <div className="inline-flex items-center justify-center w-16 h-16 bg-red-50 rounded-2xl mb-5">
-                  <svg className="w-8 h-8 text-red-600 animate-spin" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                  </svg>
+              <div className="bg-white p-12 text-center" style={{ borderRadius: '20px', boxShadow: '0 0 0 1px rgba(15,23,42,0.06), 0 4px 6px -1px rgba(15,23,42,0.06), 0 20px 40px -8px rgba(15,23,42,0.10)' }}>
+                <div className="relative inline-flex items-center justify-center mb-7">
+                  {/* 外側の光るリング */}
+                  <div className="absolute w-24 h-24 rounded-full animate-ping opacity-10"
+                    style={{ background: 'radial-gradient(circle, #dc2626, transparent)' }} />
+                  <div className="absolute w-20 h-20 rounded-full"
+                    style={{ background: 'linear-gradient(135deg, rgba(220,38,38,0.1), rgba(251,113,133,0.05))', animation: 'spin 3s linear infinite reverse' }} />
+                  <div className="relative w-16 h-16 rounded-2xl flex items-center justify-center"
+                    style={{ background: 'linear-gradient(135deg, #fff1f2, #ffe4e6)' }}>
+                    <svg className="w-8 h-8 animate-spin" fill="none" viewBox="0 0 24 24"
+                      style={{ color: '#dc2626' }}>
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
+                      <path className="opacity-90" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                  </div>
                 </div>
-                <h3 className="text-lg font-bold text-gray-900 mb-1">Imagen 4 で生成中...</h3>
-                <p className="text-sm text-gray-500 mb-7">高品質な画像生成には20〜40秒かかります</p>
-                <div className="max-w-sm mx-auto space-y-3">
-                  <div className="flex justify-between text-xs text-gray-500">
-                    <span>生成進捗</span><span className="font-medium">{Math.round(progress)}%</span>
+                <h3 className="text-xl font-bold text-slate-900 mb-1.5 tracking-tight">Imagen 4 で生成中...</h3>
+                <p className="text-sm text-slate-500 mb-9 leading-relaxed">Google の最高品質モデルが<br />20〜40秒でバナーを設計します</p>
+                <div className="max-w-xs mx-auto space-y-3">
+                  <div className="flex justify-between text-xs text-slate-500 font-medium">
+                    <span>生成進捗</span><span style={{ color: '#dc2626' }}>{Math.round(progress)}%</span>
                   </div>
-                  <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
-                    <div className="h-full bg-gradient-to-r from-red-500 to-orange-400 rounded-full transition-all duration-500 ease-out"
-                      style={{ width: `${progress}%` }} />
+                  <div className="w-full rounded-full h-2 overflow-hidden" style={{ background: '#f1f5f9' }}>
+                    <div className="h-full rounded-full transition-all duration-700 ease-out relative overflow-hidden"
+                      style={{ width: `${progress}%`, background: 'linear-gradient(90deg, #dc2626, #e11d48, #f43f5e)' }}>
+                      <div className="absolute inset-0 opacity-40"
+                        style={{ background: 'linear-gradient(90deg, transparent 0%, white 50%, transparent 100%)', animation: 'shimmer 1.5s infinite' }} />
+                    </div>
                   </div>
-                  <div className="flex justify-between mt-2">
+                  <div className="flex justify-between pt-1">
                     {(['プロンプト最適化', '画像生成中', '後処理'] as const).map((s, i) => (
                       <div key={s} className="flex items-center gap-1">
-                        <div className={`w-1.5 h-1.5 rounded-full ${i <= currentProgressStep ? 'bg-red-500' : 'bg-gray-200'}`} />
-                        <span className={`text-[10px] ${i === currentProgressStep ? 'text-red-600 font-semibold' : i < currentProgressStep ? 'text-gray-400' : 'text-gray-300'}`}>{s}</span>
+                        <div className="w-1.5 h-1.5 rounded-full transition-colors"
+                          style={{ background: i <= currentProgressStep ? '#dc2626' : '#e2e8f0' }} />
+                        <span className={`text-[10px] font-medium transition-colors
+                          ${i === currentProgressStep ? 'text-red-600' : i < currentProgressStep ? 'text-slate-400' : 'text-slate-300'}`}>{s}</span>
                       </div>
                     ))}
                   </div>
@@ -777,25 +839,28 @@ export default function BannerGenerator() {
 
             {/* エラー */}
             {!isGenerating && generateError && (
-              <div className="bg-white rounded-2xl border border-red-200 shadow-sm p-8">
-                <div className="flex gap-4">
-                  <div className="w-10 h-10 rounded-xl bg-red-100 flex items-center justify-center flex-shrink-0">
-                    <svg className="w-5 h-5 text-red-600" fill="currentColor" viewBox="0 0 20 20">
+              <div className="bg-white overflow-hidden" style={{ borderRadius: '20px', boxShadow: '0 0 0 1px rgba(220,38,38,0.12), 0 4px 6px -1px rgba(220,38,38,0.06), 0 20px 40px -8px rgba(15,23,42,0.10)' }}>
+                <div className="h-1" style={{ background: 'linear-gradient(90deg, #dc2626, #e11d48)' }} />
+                <div className="p-8 flex gap-4">
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                    style={{ background: 'linear-gradient(135deg, #fff1f2, #ffe4e6)' }}>
+                    <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20" style={{ color: '#dc2626' }}>
                       <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
                     </svg>
                   </div>
                   <div className="flex-1">
-                    <p className="font-semibold text-red-700 mb-1">生成エラー</p>
-                    <p className="text-sm text-red-600">{generateError}</p>
+                    <p className="font-bold text-slate-900 mb-1">生成エラーが発生しました</p>
+                    <p className="text-sm text-slate-500 leading-relaxed">{generateError}</p>
                   </div>
                 </div>
-                <div className="flex gap-3 mt-6">
+                <div className="flex gap-3 px-8 pb-7">
                   <button onClick={backToStep2}
-                    className="px-4 py-2 text-sm text-gray-600 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors">
+                    className="px-4 py-2.5 text-sm text-slate-600 border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors bg-white">
                     設定を変更
                   </button>
                   <button onClick={() => { setGenerateError(null); handleGenerate() }}
-                    className="px-5 py-2 text-sm font-semibold text-white bg-red-600 hover:bg-red-700 rounded-xl transition-colors">
+                    className="px-5 py-2.5 text-sm font-bold text-white rounded-xl transition-all hover:shadow-md active:scale-95"
+                    style={{ background: 'linear-gradient(135deg, #dc2626, #be123c)' }}>
                     再試行
                   </button>
                 </div>
@@ -808,18 +873,22 @@ export default function BannerGenerator() {
                 {/* 生成情報ヘッダー */}
                 <div className="flex items-center justify-between px-1">
                   <div>
-                    <h3 className="text-sm font-bold text-gray-900">{form.productName}</h3>
-                    <p className="text-xs text-gray-400 mt-0.5">
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <span className="text-[9px] font-black tracking-[0.15em] uppercase px-2 py-0.5 rounded-full"
+                        style={{ background: 'linear-gradient(135deg, #ecfdf5, #d1fae5)', color: '#065f46' }}>完成</span>
+                      <h3 className="text-sm font-bold text-slate-900">{form.productName}</h3>
+                    </div>
+                    <p className="text-xs text-slate-400 mt-0.5 pl-0.5">
                       {generatedImage.size.label} · {form.category || '未設定'} · {form.target}
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
                     <button onClick={backToStep2}
-                      className="text-xs text-gray-500 border border-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-50 transition-colors">
+                      className="text-xs text-slate-500 border border-slate-200 bg-white px-3 py-1.5 rounded-lg hover:bg-slate-50 transition-colors">
                       設定を変更
                     </button>
                     <button onClick={() => { setGeneratedImage(null); handleGenerate() }}
-                      className="flex items-center gap-1.5 text-xs font-medium text-gray-600 border border-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-50 transition-colors">
+                      className="flex items-center gap-1.5 text-xs font-medium text-slate-600 border border-slate-200 bg-white px-3 py-1.5 rounded-lg hover:bg-slate-50 transition-colors">
                       <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                       </svg>
@@ -829,9 +898,11 @@ export default function BannerGenerator() {
                 </div>
 
                 {/* 画像カード */}
-                <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+                <div className="bg-white overflow-hidden" style={{ borderRadius: '20px', boxShadow: '0 0 0 1px rgba(15,23,42,0.06), 0 4px 6px -1px rgba(15,23,42,0.06), 0 20px 40px -8px rgba(15,23,42,0.12)' }}>
+                  {/* 上部カラーバー */}
+                  <div className="h-1" style={{ background: 'linear-gradient(90deg, #10b981, #34d399, #6ee7b7)' }} />
                   {/* 画像プレビュー */}
-                  <div className="bg-gray-900 p-4">
+                  <div className="p-5" style={{ background: 'linear-gradient(160deg, #0f172a, #1e293b)' }}>
                     <div className="relative overflow-hidden rounded-xl"
                       style={{ containerType: 'inline-size' }}>
                       {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -876,14 +947,18 @@ export default function BannerGenerator() {
 
                   {/* AI診断レポート */}
                   {generatedImage.reasoning && generatedImage.reasoning.length > 0 && (
-                    <div className="border-t border-gray-100">
+                    <div className="border-t border-slate-100">
                       <button onClick={() => setShowReasoning(v => !v)}
-                        className="w-full flex items-center justify-between px-6 py-3.5 text-left hover:bg-gray-50 transition-colors">
-                        <div className="flex items-center gap-2">
-                          <span className="text-[10px] font-bold text-indigo-600 uppercase tracking-widest">AI診断レポート</span>
-                          <span className="text-xs text-gray-400 hidden sm:block">— 提案書にそのまま使える設計根拠</span>
+                        className="w-full flex items-center justify-between px-6 py-4 text-left hover:bg-slate-50 transition-colors">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0 text-white text-xs"
+                            style={{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6)' }}>
+                            ✦
+                          </div>
+                          <span className="text-xs font-bold text-slate-700">AI診断レポート</span>
+                          <span className="text-xs text-slate-400 hidden sm:block">— 提案書にそのまま使える設計根拠</span>
                         </div>
-                        <svg className={`w-4 h-4 text-gray-400 flex-shrink-0 transition-transform duration-200 ${showReasoning ? 'rotate-180' : ''}`}
+                        <svg className={`w-4 h-4 text-slate-400 flex-shrink-0 transition-transform duration-200 ${showReasoning ? 'rotate-180' : ''}`}
                           fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                         </svg>
@@ -891,11 +966,12 @@ export default function BannerGenerator() {
                       {showReasoning && (
                         <div className="px-6 pb-5 space-y-2.5">
                           {generatedImage.reasoning.map((point, i) => (
-                            <div key={i} className="bg-indigo-50 rounded-xl p-3.5 flex gap-3">
+                            <div key={i} className="rounded-xl p-3.5 flex gap-3"
+                              style={{ background: 'linear-gradient(135deg, #f5f3ff, #ede9fe)', border: '1px solid rgba(139,92,246,0.15)' }}>
                               <span className="text-lg flex-shrink-0 leading-none mt-0.5">{point.icon}</span>
                               <div className="min-w-0">
-                                <p className="text-xs font-bold text-indigo-800 mb-1">{point.title}</p>
-                                <p className="text-xs text-indigo-700 leading-relaxed">{point.body}</p>
+                                <p className="text-xs font-bold mb-1" style={{ color: '#4c1d95' }}>{point.title}</p>
+                                <p className="text-xs leading-relaxed" style={{ color: '#5b21b6' }}>{point.body}</p>
                               </div>
                             </div>
                           ))}
@@ -904,8 +980,8 @@ export default function BannerGenerator() {
                               const text = generatedImage.reasoning!.map(p => `【${p.title}】\n${p.body}`).join('\n\n')
                               navigator.clipboard.writeText(text).catch(() => {})
                             }}
-                            className="text-xs text-indigo-500 underline hover:text-indigo-700 transition-colors mt-1 block">
-                            テキストをコピー（提案書用）
+                            className="text-xs font-medium transition-colors mt-1 block" style={{ color: '#7c3aed' }}>
+                            ↗ テキストをコピー（提案書用）
                           </button>
                         </div>
                       )}
@@ -913,17 +989,18 @@ export default function BannerGenerator() {
                   )}
 
                   {/* アクションフッター */}
-                  <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-between gap-3">
+                  <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-between gap-3"
+                    style={{ background: 'linear-gradient(135deg, #f8fafc, #f1f5f9)' }}>
                     {/* フィードバック */}
-                    <div className="flex items-center gap-1 border border-gray-200 rounded-xl overflow-hidden flex-shrink-0">
+                    <div className="flex items-center gap-1 border border-slate-200 rounded-xl overflow-hidden flex-shrink-0 bg-white">
                       {(['good', 'bad'] as const).map((type, ti) => (
                         <div key={type} className="flex items-center">
-                          {ti > 0 && <div className="w-px h-5 bg-gray-200" />}
+                          {ti > 0 && <div className="w-px h-5 bg-slate-200" />}
                           <button onClick={() => handleFeedback(type)}
-                            className={`px-3 py-2 text-xs flex items-center gap-1.5 transition-colors
+                            className={`px-3 py-2 text-xs flex items-center gap-1.5 transition-all font-medium
                               ${feedback === type
-                                ? type === 'good' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'
-                                : 'text-gray-500 hover:bg-gray-50'}`}>
+                                ? type === 'good' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-600'
+                                : 'text-slate-500 hover:bg-slate-50'}`}>
                             <svg className={`w-3.5 h-3.5 ${type === 'bad' ? 'rotate-180' : ''}`}
                               fill={feedback === type ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
@@ -938,11 +1015,12 @@ export default function BannerGenerator() {
                     {/* ダウンロードボタン */}
                     <div className="flex items-center gap-2">
                       <button onClick={downloadRaw}
-                        className="px-3 py-2 text-xs text-gray-500 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors whitespace-nowrap">
+                        className="px-3 py-2 text-xs text-slate-500 border border-slate-200 rounded-xl hover:bg-white transition-colors whitespace-nowrap bg-white">
                         元画像
                       </button>
                       <button onClick={downloadComposite} disabled={isDownloading}
-                        className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-red-600 hover:bg-red-700 disabled:bg-gray-300 rounded-xl transition-colors whitespace-nowrap">
+                        className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white rounded-xl transition-all hover:shadow-md active:scale-95 whitespace-nowrap disabled:opacity-50"
+                        style={{ background: isDownloading ? '#9ca3af' : 'linear-gradient(135deg, #dc2626, #be123c)' }}>
                         {isDownloading ? (
                           <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
                             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
@@ -961,17 +1039,18 @@ export default function BannerGenerator() {
 
                 {/* 送信プロンプト確認 */}
                 {lastPrompt && (
-                  <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+                  <div className="bg-white overflow-hidden" style={{ borderRadius: '16px', boxShadow: '0 0 0 1px rgba(15,23,42,0.05), 0 2px 8px rgba(15,23,42,0.06)' }}>
                     <button onClick={() => setShowPrompt(v => !v)}
-                      className="w-full flex items-center justify-between px-6 py-3.5 text-left hover:bg-gray-50 transition-colors">
-                      <span className="text-xs font-semibold text-gray-500">送信プロンプトを確認（品質改善用）</span>
-                      <svg className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${showPrompt ? 'rotate-180' : ''}`}
+                      className="w-full flex items-center justify-between px-6 py-3.5 text-left hover:bg-slate-50 transition-colors">
+                      <span className="text-xs font-semibold text-slate-500">送信プロンプトを確認（品質改善用）</span>
+                      <svg className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${showPrompt ? 'rotate-180' : ''}`}
                         fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                       </svg>
                     </button>
                     {showPrompt && (
-                      <pre className="px-6 pb-5 text-xs text-gray-500 bg-gray-50 border-t border-gray-100 whitespace-pre-wrap leading-relaxed max-h-56 overflow-y-auto">
+                      <pre className="px-6 pb-5 text-xs text-slate-500 border-t border-slate-100 whitespace-pre-wrap leading-relaxed max-h-56 overflow-y-auto"
+                        style={{ background: 'linear-gradient(135deg, #f8fafc, #f1f5f9)' }}>
                         {lastPrompt}
                       </pre>
                     )}
@@ -979,9 +1058,12 @@ export default function BannerGenerator() {
                 )}
 
                 {/* 最初からボタン */}
-                <div className="text-center pt-2">
+                <div className="text-center pt-2 pb-2">
                   <button onClick={resetAll}
-                    className="text-sm text-gray-400 hover:text-gray-600 underline transition-colors">
+                    className="inline-flex items-center gap-2 text-sm text-slate-400 hover:text-slate-700 transition-colors font-medium group">
+                    <svg className="w-4 h-4 group-hover:rotate-180 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
                     新しいバナーを作成する
                   </button>
                 </div>
@@ -990,6 +1072,23 @@ export default function BannerGenerator() {
           </div>
         )}
       </main>
+
+      {/* フッター */}
+      <footer className="border-t border-slate-200 py-5 relative z-10"
+        style={{ background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(8px)' }}>
+        <div className="max-w-5xl mx-auto px-6 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0"
+              style={{ background: 'linear-gradient(135deg, #dc2626, #be123c)' }}>
+              <span className="text-white text-[9px] font-black">PF</span>
+            </div>
+            <span className="text-xs text-slate-400 font-medium">PFクリエイティブ生成</span>
+            <span className="text-slate-200 text-xs">|</span>
+            <span className="text-xs text-slate-300">v1.0</span>
+          </div>
+          <p className="text-[11px] text-slate-300">Powered by Imagen 4 · Google AI</p>
+        </div>
+      </footer>
     </div>
   )
 }
