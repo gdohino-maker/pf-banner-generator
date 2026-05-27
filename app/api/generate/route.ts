@@ -113,6 +113,53 @@ async function fetchPageDesignHints(url: string): Promise<string> {
   }
 }
 
+// ─── Gemini で商品名を英語の視覚的説明に変換（Imagen 4 精度向上）────────────
+async function describeProductVisually(
+  ai: GoogleGenAI,
+  productName: string,
+  category: string,
+  target: string,
+  productFeatures?: string,
+  saleInfo?: string,
+  designStyle?: string,
+): Promise<string> {
+  try {
+    const result = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: [{
+        role: 'user',
+        parts: [{
+          text: `You are a commercial photographer's art director. Convert this Japanese product information into a precise English visual description for an AI image generator (Imagen 4).
+
+Product name: "${productName}"
+Category: ${category || 'General'}
+Target customer: ${target}
+${productFeatures ? `Key features: ${productFeatures}` : ''}
+${saleInfo ? `Promotion: ${saleInfo}` : ''}
+${designStyle ? `Design style: ${designStyle}` : ''}
+
+STRICT RULES for your output:
+1. Write 2-3 sentences of English ONLY
+2. Describe the PRODUCT VISUALLY: its physical appearance, colors, textures, materials, shape
+3. Describe the ideal PHOTOGRAPHIC SCENE or SETTING that makes this product most appealing
+4. NEVER include any numbers, weights (g, kg, ml, L), prices, quantities, or measurements
+5. NEVER include any text, words, letters that would appear on packaging or labels
+6. Use precise visual vocabulary: specific colors, textures, materials, light quality
+7. Make it photorealistic commercial photography language
+
+GOOD EXAMPLE for "ローストコーヒー300g":
+"Premium dark roast coffee beans in warm espresso-brown tones, matte kraft paper bag with elegant gold embossing, aromatic steam rising from a freshly brewed single-origin pour. Moody café atmosphere with warm amber backlight and dark wooden surfaces."
+
+Output ONLY the English visual description, no explanations, no Japanese.`,
+        }]
+      }]
+    })
+    return result.text?.trim() ?? ''
+  } catch {
+    return ''
+  }
+}
+
 // ─── Gemini で商品画像を分析してバックグラウンド設計ヒントを取得 ──────────────
 async function analyzeProductImage(
   ai: GoogleGenAI,
@@ -121,7 +168,7 @@ async function analyzeProductImage(
 ): Promise<string> {
   try {
     const result = await ai.models.generateContent({
-      model: 'gemini-2.0-flash',
+      model: 'gemini-2.5-flash',
       contents: [{
         role: 'user',
         parts: [
@@ -223,21 +270,21 @@ const CATEGORY_REASONING: Record<string, string> = {
 // ─── テキスト配置 → ネガティブスペース記述（英語）────────────────────────────
 function textPositionToSpaceDesc(pos: string): string {
   const map: Record<string, string> = {
-    'bottom-left':   'lower-left quadrant (bottom 40% and left 50% of the frame)',
-    'bottom-center': 'bottom third of the frame (full width)',
-    'bottom-right':  'lower-right quadrant (bottom 40% and right 50% of the frame)',
-    'top-left':      'upper-left quadrant (top 40% and left 50% of the frame)',
-    'top-center':    'top third of the frame (full width)',
-    'top-right':     'upper-right quadrant (top 40% and right 50% of the frame)',
+    'bottom-left':   'lower-left corner area',
+    'bottom-center': 'bottom strip (full width)',
+    'bottom-right':  'lower-right corner area',
+    'top-left':      'upper-left corner area',
+    'top-center':    'top strip (full width)',
+    'top-right':     'upper-right corner area',
   }
   return map[pos] ?? 'lower-left or left side of the frame'
 }
 
 // ─── 楽天EC バナー制作 20の鉄則 ──────────────────────────────────────────────
 const RAKUTEN_BANNER_RULES = [
-  'Main product clearly visible and occupying at least 55% of the frame',
+  'Main product clearly visible and dominant in the frame',
   'Rule-of-thirds composition with product slightly off-center for dynamic tension',
-  'Reserve 35% clean negative space in the designated text overlay zone',
+  'Reserve a large clean negative space zone in the designated area for text overlay',
   'Strong single focal point with no visual ambiguity about the product',
   'High visual contrast between product and background (minimum 4.5:1)',
   'Accent color used as intentional design element throughout composition',
@@ -274,44 +321,43 @@ function buildPrompt(input: {
   saleInfo?: string
   campaignType?: string
   copyTone?: string
+  productVisualDesc?: string
 }): string {
   const colorDesc = hexToColorDescription(input.color)
   const categoryStyle = CATEGORY_STYLE[input.category] ?? CATEGORY_STYLE['その他']
   const spaceDesc = textPositionToSpaceDesc(input.textPosition ?? 'bottom-left')
   const stylePrompt = input.designStyle ? DESIGN_STYLE_PROMPTS[input.designStyle] ?? '' : ''
 
-  // 商品画像あり → 背景だけ生成するモード
-  if (input.hasProductImage) {
-    const productSide = (input.textPosition ?? 'bottom-left').includes('left') ? 'right' : 'left'
-    const bgColor = input.productBgColor ?? '#f5f5f5'
-    return [
-      `COMMERCIAL BANNER BACKGROUND: Create a clean abstract atmospheric background for a "${input.productName}" product banner. The actual product photo is composited separately in post-production. Generate BACKGROUND ENVIRONMENT ONLY — no products, no objects, no merchandise.`,
-      `TARGET: "${input.target}".`,
-      stylePrompt ? `VISUAL STYLE: ${stylePrompt}` : `ATMOSPHERE: ${categoryStyle}`,
-      input.productImageAnalysis ? `COLOR REFERENCE: ${input.productImageAnalysis}` : '',
-      input.pageHints ? input.pageHints : '',
-      `GRADIENT COMPOSITION: Smooth horizontal gradient — ${productSide === 'right' ? 'left 55%' : 'right 55%'} is ${colorDesc} with soft atmospheric bokeh and gentle light. ${productSide} 45% gradually transitions to the exact color ${bgColor} to seamlessly receive the product composite. Smooth natural fade between zones, zero hard edge.`,
-      `VISUAL ELEMENTS: Soft bokeh spheres of light, gentle gradients, subtle atmospheric glow. Abstract and minimal. No faces, no people, no objects of any kind.`,
-      `TECHNICAL: 8K resolution, professional studio quality, premium contemporary color grade.`,
-      `ABSOLUTE CRITICAL: ZERO TEXT. ZERO TYPOGRAPHY. ZERO CHARACTERS. ZERO NUMBERS. ZERO LETTERS. ZERO JAPANESE CHARACTERS. ZERO WORDS. The image must contain exclusively visual elements — colors, light, gradients, bokeh only. Any typographic element constitutes automatic failure.`,
-    ].filter(Boolean).join(' ')
-  }
+  // 常に背景のみ生成（Imagenに商品を作らせない — 偽商品・文字化けパッケージを根絶）
+  const textSide = (input.textPosition ?? 'bottom-left').includes('left') ? 'left' : 'right'
+  const productSide = textSide === 'left' ? 'right' : 'left'
 
-  // 商品画像なし → 従来の商品込み生成
+  // 商品画像ありの場合：商品側の雰囲気をgradeーションで合成
+  const productBgColorDesc = input.productBgColor ? hexToColorDescription(input.productBgColor) : 'soft neutral light'
+  const gradientInstruction = input.hasProductImage
+    ? `GRADIENT COMPOSITION: Smooth seamless horizontal gradient — the ${textSide} half features ${colorDesc} with soft atmospheric bokeh and warm light glow. The ${productSide} half gently fades to ${productBgColorDesc} to seamlessly blend with the composited product photo. No hard edges, no abrupt transitions, only smooth organic color flow.`
+    : `GRADIENT COMPOSITION: Full-width smooth atmospheric gradient. The dominant tone is ${colorDesc}. Light softly blooms from the ${productSide} side and gently dims toward the ${textSide} side for text legibility. Seamless, no visible bands or hard edges.`
+
+  // 商品画像なしでビジュアル説明あり：雰囲気としてビジュアルを取り込む
+  const atmosphereHint = (!input.hasProductImage && input.productVisualDesc)
+    ? `ATMOSPHERE REFERENCE: The banner promotes "${input.productVisualDesc}". Reflect this product's visual character (colors, mood, textures) purely through abstract light, color, and bokeh — no objects, no products.`
+    : ''
+
   return [
-    `SUBJECT: Highly detailed commercial photograph of "${input.productName}".`,
-    `AUDIENCE & MOOD: Designed to appeal to "${input.target}". Visual tone color grading and composition must resonate strongly with this demographic.`,
-    stylePrompt ? `DESIGN STYLE — OVERRIDE PRIORITY: ${stylePrompt}` : `CATEGORY STYLE — ${input.category || 'General'}: ${categoryStyle}`,
-    input.campaignType && CAMPAIGN_TYPE_PROMPTS[input.campaignType] ? `CAMPAIGN ATMOSPHERE: ${CAMPAIGN_TYPE_PROMPTS[input.campaignType]}` : '',
-    input.copyTone && COPY_TONE_PROMPTS[input.copyTone] ? `VISUAL TONE — OVERRIDE: ${COPY_TONE_PROMPTS[input.copyTone]}` : '',
-    input.productFeatures?.trim() ? `PRODUCT USP VISUALIZATION: This product has the following key selling points: "${input.productFeatures}". Visualize these advantages through premium material quality, lifestyle context, and product presentation — express them visually without any text.` : '',
-    input.saleInfo?.trim() ? `COMMERCIAL CONTEXT: This product is promoted with: "${input.saleInfo}". Reflect this commercial energy in the visual atmosphere (dynamic, value-communicating, exciting) — without showing any text, numbers, or pricing.` : '',
+    `COMMERCIAL BANNER BACKGROUND ONLY: Generate a pure atmospheric background for a "${input.productName}" banner. This is a background layer — the product photo is composited in post-production. GENERATE ZERO PRODUCTS, ZERO OBJECTS, ZERO MERCHANDISE, ZERO PACKAGING, ZERO BOTTLES, ZERO BAGS, ZERO CUPS — background environment only.`,
+    `TARGET AUDIENCE: "${input.target}".`,
+    stylePrompt ? `VISUAL STYLE: ${stylePrompt}` : `CATEGORY ATMOSPHERE: ${categoryStyle}`,
+    input.campaignType && CAMPAIGN_TYPE_PROMPTS[input.campaignType] ? `CAMPAIGN ENERGY: ${CAMPAIGN_TYPE_PROMPTS[input.campaignType]}` : '',
+    input.copyTone && COPY_TONE_PROMPTS[input.copyTone] ? `TONE: ${COPY_TONE_PROMPTS[input.copyTone]}` : '',
+    atmosphereHint,
+    input.productImageAnalysis ? `COLOR HARMONY: ${input.productImageAnalysis}` : '',
     input.pageHints ? input.pageHints : '',
-    `TECHNICAL: 8K resolution photorealistic sharp focus professional studio lighting. Premium contemporary color grade.`,
-    `COLOR THEME: Dominant accent and background color must be ${colorDesc}. Use this color as intentional design element throughout.`,
-    `EC RULES (all 20 must be satisfied): ${RAKUTEN_BANNER_RULES.join(' | ')}`,
-    `NEGATIVE SPACE — CRITICAL REQUIREMENT: Reserve a completely clean and empty area of exactly 35% of the total frame in the ${spaceDesc}. This zone must contain ONLY a simple gradient, solid color, or soft bokeh — absolutely nothing else. Position ALL visual interest entirely AWAY from this reserved zone.`,
-    `ABSOLUTE — HIGHEST PRIORITY: ZERO text. ZERO letters. ZERO numbers. ZERO Japanese characters. ZERO Korean characters. ZERO Chinese characters. ZERO words. ZERO typography. ZERO price tags. ZERO logos. ZERO watermarks. ZERO labels. ZERO signs. The image must contain exclusively photographic visual elements. Any character or typographic element anywhere in the image is an automatic critical failure.`,
+    gradientInstruction,
+    `COLOR THEME: ${colorDesc} is the dominant color. Soft bokeh, atmospheric light, smooth gradients only.`,
+    `NEGATIVE SPACE: Keep the ${spaceDesc} completely clear and visually empty — reserved for text overlay that will be added in post-production. This zone must have zero objects, zero visual elements, zero graphics, zero text — only the gradient background color.`,
+    `VISUAL ELEMENTS: ONLY smooth gradients, soft circular bokeh orbs, and gentle light diffusion. Absolutely NO geometric shapes, NO diamonds, NO polygons, NO hexagons, NO triangles, NO lines, NO patterns, NO abstract shapes, NO objects of any kind.`,
+    `TECHNICAL: 8K resolution, professional studio quality, premium contemporary color grade.`,
+    `ABSOLUTE CRITICAL — HIGHEST PRIORITY: ZERO TEXT. ZERO TYPOGRAPHY. ZERO CHARACTERS. ZERO NUMBERS. ZERO LETTERS. ZERO JAPANESE. ZERO CHINESE. ZERO KOREAN. ZERO WORDS. ZERO LOGOS. ZERO LABELS. ZERO PRODUCTS. ZERO OBJECTS. Pure color, light, gradient, bokeh only. Any character, product, or object anywhere is automatic failure.`,
   ].filter(Boolean).join(' ')
 }
 
@@ -394,12 +440,13 @@ export async function POST(req: NextRequest) {
   const ai = new GoogleGenAI({ apiKey })
   const hasProductImage = !!(productImageBase64 && productImageMimeType)
 
-  const [pageHints, productImageAnalysis] = await Promise.all([
+  const [pageHints, productImageAnalysis, productVisualDesc] = await Promise.all([
     fetchPageDesignHints(referenceUrl ?? ''),
     hasProductImage ? analyzeProductImage(ai, productImageBase64!, productImageMimeType!) : Promise.resolve(''),
+    !hasProductImage ? describeProductVisually(ai, productName, category, target, productFeatures, saleInfo, designStyle) : Promise.resolve(''),
   ])
 
-  const prompt = buildPrompt({ productName, category, target, catchcopy, color, textPosition, designStyle, pageHints, hasProductImage, productImageAnalysis, productBgColor, productFeatures, saleInfo, campaignType, copyTone })
+  const prompt = buildPrompt({ productName, category, target, catchcopy, color, textPosition, designStyle, pageHints, hasProductImage, productImageAnalysis, productBgColor, productFeatures, saleInfo, campaignType, copyTone, productVisualDesc })
   const reasoning = buildReasoning({ productName, category, target, catchcopy, color, textPosition, designStyle, referenceUrl })
   const aspectRatio = toImagenAspectRatio(size.width, size.height)
 

@@ -216,6 +216,37 @@ function sampleCornerColor(dataUrl: string): Promise<string> {
   })
 }
 
+// AI背景除去（@imgly/background-removal — ブラウザ内ONNX推論）
+// 成功時は blob: URL を返す。失敗時は null を返す（data: URLを返すと成功と区別できないため）
+async function removeProductBackground(
+  dataUrl: string,
+  onProgress?: (pct: number) => void,
+): Promise<string | null> {
+  try {
+    const { removeBackground } = await import('@imgly/background-removal')
+
+    // fetch(data:) より直接Blob変換の方が確実
+    const base64 = dataUrl.split(',')[1]
+    if (!base64) return null
+    const mimeType = dataUrl.match(/data:(.*?);/)?.[1] ?? 'image/jpeg'
+    const byteStr = atob(base64)
+    const bytes = new Uint8Array(byteStr.length)
+    for (let i = 0; i < byteStr.length; i++) bytes[i] = byteStr.charCodeAt(i)
+    const inputBlob = new Blob([bytes], { type: mimeType })
+
+    const outputBlob = await removeBackground(inputBlob, {
+      output: { format: 'image/png', quality: 1.0 },
+      progress: (key: string, current: number, total: number) => {
+        if (total > 0 && onProgress) onProgress(Math.round((current / total) * 100))
+      },
+    })
+    return URL.createObjectURL(outputBlob)
+  } catch (e) {
+    console.error('[BG Removal] Failed:', e)
+    return null
+  }
+}
+
 // 商品画像をAPI送信用にリサイズ（Gemini分析用）
 async function resizeForAnalysis(dataUrl: string, maxSide = 768): Promise<{ base64: string; mimeType: string }> {
   return new Promise(resolve => {
@@ -245,6 +276,7 @@ async function renderToCanvas(
   productImageDataUrl: string | null = null,
   productImagePos: 'left' | 'center' | 'right' = 'right',
   productBgColor = '#f5f5f5',
+  productImageCutoutUrl: string | null = null,
 ): Promise<HTMLCanvasElement> {
   const { width: cw, height: ch } = img.size
   const canvas = document.createElement('canvas')
@@ -260,9 +292,10 @@ async function renderToCanvas(
   else { sh = iw / canvasRatio; sy = (ih - sh) / 2 }
   ctx.drawImage(bgImg, sx, sy, sw, sh, 0, 0, cw, ch)
 
-  // 商品画像を背景の上・テキストの下に合成（背景色ゾーンでシームレスに）
-  if (productImageDataUrl) {
-    const prodImg = await loadImage(productImageDataUrl)
+  // 商品画像を背景の上・テキストの下に合成
+  const effectiveProductUrl = productImageCutoutUrl ?? productImageDataUrl
+  if (effectiveProductUrl) {
+    const prodImg = await loadImage(effectiveProductUrl)
     const maxH = ch * 0.92
     const maxW = cw * 0.48
     const scale = Math.min(maxW / prodImg.naturalWidth, maxH / prodImg.naturalHeight, 1.0)
@@ -273,11 +306,13 @@ async function renderToCanvas(
     else if (productImagePos === 'center') px2 = Math.round((cw - pw) / 2)
     else px2 = Math.round(cw * 0.01)
     const py2 = Math.round((ch - ph) / 2)
-    // 商品の背景色でゾーンを全高塗りつぶし → シームレス合成
-    ctx.fillStyle = productBgColor
-    if (productImagePos === 'right') ctx.fillRect(px2, 0, cw - px2, ch)
-    else if (productImagePos === 'left') ctx.fillRect(0, 0, px2 + pw, ch)
-    else ctx.fillRect(px2, 0, pw, ch)
+    if (!productImageCutoutUrl) {
+      // 背景除去なし：背景色ゾーンを塗りつぶしてシームレス合成
+      ctx.fillStyle = productBgColor
+      if (productImagePos === 'right') ctx.fillRect(px2, 0, cw - px2, ch)
+      else if (productImagePos === 'left') ctx.fillRect(0, 0, px2 + pw, ch)
+      else ctx.fillRect(px2, 0, pw, ch)
+    }
     ctx.drawImage(prodImg, px2, py2, pw, ph)
   }
 
@@ -429,6 +464,10 @@ export default function BannerGenerator() {
   const [productImageDataUrl, setProductImageDataUrl] = useState<string | null>(null)
   const [productImagePos, setProductImagePos] = useState<'left' | 'center' | 'right'>('right')
   const [productBgColor, setProductBgColor] = useState<string>('#f5f5f5')
+  const [productImageCutoutUrl, setProductImageCutoutUrl] = useState<string | null>(null)
+  const [isRemovingBg, setIsRemovingBg] = useState(false)
+  const [bgRemovalPct, setBgRemovalPct] = useState(0)
+  const [bgRemovalError, setBgRemovalError] = useState(false)
 
   // selectedImgIdx を使った computed value — downloadCompositeより前に定義
   const generatedImage = generatedImages[selectedImgIdx] ?? null
@@ -438,7 +477,6 @@ export default function BannerGenerator() {
   const validate = () => {
     const next: Partial<FormData> = {}
     if (!form.productName.trim()) next.productName = '商品名を入力してください'
-    if (!form.appealText.trim())  next.appealText  = '訴求テキストを入力してください'
     if (!form.target.trim())      next.target      = 'ターゲットを入力してください'
     setErrors(next)
     return Object.keys(next).length === 0
@@ -534,6 +572,10 @@ export default function BannerGenerator() {
     setFeedback(null)
     setProductImageDataUrl(null)
     setProductBgColor('#f5f5f5')
+    setProductImageCutoutUrl(null)
+    setIsRemovingBg(false)
+    setBgRemovalPct(0)
+    setBgRemovalError(false)
     stopProgress(0)
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
@@ -543,7 +585,7 @@ export default function BannerGenerator() {
     if (!generatedImage) return
     setIsDownloading(true)
     try {
-      const canvas = await renderToCanvas(generatedImage, form.appealText, overlay, fontStyleId, activeStamp, stampPosition, productImageDataUrl, productImagePos, productBgColor)
+      const canvas = await renderToCanvas(generatedImage, form.appealText, overlay, fontStyleId, activeStamp, stampPosition, productImageDataUrl, productImagePos, productBgColor, productImageCutoutUrl)
       canvas.toBlob(blob => {
         if (!blob) return
         const url = URL.createObjectURL(blob)
@@ -554,7 +596,7 @@ export default function BannerGenerator() {
         URL.revokeObjectURL(url)
       }, 'image/jpeg', 0.93)
     } finally { setIsDownloading(false) }
-  }, [generatedImage, form.appealText, overlay, fontStyleId, activeStamp, stampPosition, productImageDataUrl, productImagePos, productBgColor])
+  }, [generatedImage, form.appealText, overlay, fontStyleId, activeStamp, stampPosition, productImageDataUrl, productImagePos, productBgColor, productImageCutoutUrl])
 
   const downloadRaw = () => {
     if (!generatedImage) return
@@ -729,18 +771,16 @@ export default function BannerGenerator() {
                 {/* 訴求テキスト */}
                 <div>
                   <label className="block text-sm font-semibold text-slate-700 mb-1.5">
-                    訴求テキスト（キャッチコピー）<span className="text-red-500">*</span>
+                    訴求テキスト（キャッチコピー）
+                    <span className="ml-2 text-[10px] font-normal text-slate-400 border border-slate-200 rounded-full px-2 py-0.5">任意</span>
                   </label>
                   <textarea value={form.appealText}
                     onChange={e => setForm(f => ({ ...f, appealText: e.target.value }))}
-                    placeholder="例：毎朝の一杯が変わる。本格派のコク深い味わい。"
+                    placeholder="例：毎朝の一杯が変わる。本格派のコク深い味わい。（空白の場合はテキストなしバナーになります）"
                     rows={3}
-                    className={`w-full px-4 py-3 text-sm rounded-xl border outline-none resize-none transition-all
-                      ${errors.appealText
-                        ? 'border-red-400 bg-red-50 focus:ring-2 focus:ring-red-100'
-                        : 'border-slate-200 bg-white focus:border-red-400 focus:ring-2 focus:ring-red-50'}`}
+                    className="w-full px-4 py-3 text-sm rounded-xl border border-slate-200 bg-white outline-none focus:border-red-400 focus:ring-2 focus:ring-red-50 transition-all resize-none"
                   />
-                  {errors.appealText && <p className="text-red-500 text-xs mt-1.5">{errors.appealText}</p>}
+                  <p className="text-[11px] text-slate-400 mt-1.5">空欄にするとテキスト非表示のバナーになります</p>
                 </div>
 
                 {/* 価格・割引情報 */}
@@ -845,14 +885,27 @@ export default function BannerGenerator() {
                     <span className="ml-2 text-[10px] font-normal text-slate-400 border border-slate-200 rounded-full px-2 py-0.5">任意</span>
                   </label>
                   <label className="flex flex-col items-center justify-center w-full h-28 border-2 border-dashed rounded-xl cursor-pointer transition-all relative overflow-hidden"
-                    style={{ borderColor: productImageDataUrl ? '#fca5a5' : '#e2e8f0', background: productImageDataUrl ? '#fff1f2' : 'white' }}>
+                    style={{ borderColor: productImageDataUrl ? '#fca5a5' : '#e2e8f0', background: productImageDataUrl ? (productImageCutoutUrl ? 'repeating-conic-gradient(#e5e7eb 0% 25%, white 0% 50%) 0 0 / 16px 16px' : '#fff1f2') : 'white' }}>
                     {productImageDataUrl ? (
                       <>
                         {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={productImageDataUrl} alt="商品画像プレビュー" className="h-full w-full object-contain p-2" />
-                        <div className="absolute inset-0 bg-black/0 hover:bg-black/25 transition-colors flex items-center justify-center opacity-0 hover:opacity-100">
-                          <span className="text-white text-xs font-bold bg-black/40 px-3 py-1 rounded-full">変更</span>
-                        </div>
+                        <img src={productImageCutoutUrl ?? productImageDataUrl} alt="商品画像プレビュー" className="h-full w-full object-contain p-2" />
+                        {isRemovingBg && (
+                          <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5"
+                            style={{ background: 'rgba(255,255,255,0.90)', backdropFilter: 'blur(3px)' }}>
+                            <svg className="w-5 h-5 animate-spin text-red-500" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                            </svg>
+                            <span className="text-xs font-semibold text-red-600">AI背景除去中{bgRemovalPct > 0 ? ` ${bgRemovalPct}%` : '...'}</span>
+                            <span className="text-[10px] text-slate-400">{bgRemovalPct === 0 ? '初回はモデル読込に30秒ほど' : bgRemovalPct < 80 ? '推論中...' : 'もうすぐ完了'}</span>
+                          </div>
+                        )}
+                        {!isRemovingBg && (
+                          <div className="absolute inset-0 bg-black/0 hover:bg-black/25 transition-colors flex items-center justify-center opacity-0 hover:opacity-100">
+                            <span className="text-white text-xs font-bold bg-black/40 px-3 py-1 rounded-full">変更</span>
+                          </div>
+                        )}
                       </>
                     ) : (
                       <div className="flex flex-col items-center gap-1.5 text-slate-400 pointer-events-none">
@@ -871,21 +924,48 @@ export default function BannerGenerator() {
                         reader.onload = async ev => {
                           const url = ev.target?.result as string
                           setProductImageDataUrl(url)
+                          setProductImageCutoutUrl(null)
+                          setBgRemovalError(false)
+                          setBgRemovalPct(0)
+                          setIsRemovingBg(true)
                           const bg = await sampleCornerColor(url)
                           setProductBgColor(bg)
+                          const cutout = await removeProductBackground(url, pct => setBgRemovalPct(pct))
+                          if (cutout) {
+                            setProductImageCutoutUrl(cutout)
+                          } else {
+                            setBgRemovalError(true)
+                            setProductImageCutoutUrl(null)
+                          }
+                          setIsRemovingBg(false)
                         }
                         reader.readAsDataURL(file)
                         e.target.value = ''
                       }} />
                   </label>
                   {productImageDataUrl && (
-                    <button onClick={() => setProductImageDataUrl(null)}
-                      className="mt-1.5 text-xs text-slate-400 hover:text-red-500 transition-colors">
-                      画像を削除
-                    </button>
+                    <div className="flex items-center gap-3 mt-1.5">
+                      <button onClick={() => { setProductImageDataUrl(null); setProductImageCutoutUrl(null); setIsRemovingBg(false); setBgRemovalError(false); setBgRemovalPct(0) }}
+                        className="text-xs text-slate-400 hover:text-red-500 transition-colors">
+                        画像を削除
+                      </button>
+                      {productImageCutoutUrl && !isRemovingBg && (
+                        <span className="flex items-center gap-1 text-[10px] font-semibold text-emerald-600 bg-emerald-50 border border-emerald-200 rounded-full px-2 py-0.5">
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                          </svg>
+                          背景除去済み
+                        </span>
+                      )}
+                      {bgRemovalError && !isRemovingBg && (
+                        <span className="flex items-center gap-1 text-[10px] font-semibold text-amber-600 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">
+                          ⚠ 背景除去失敗（元画像で合成）
+                        </span>
+                      )}
+                    </div>
                   )}
                   <p className="text-[11px] text-slate-400 mt-1.5 leading-relaxed">
-                    アップロードした画像がバナーに合成されます（デザイン乖離を防止）
+                    AIは常に背景のみ生成します。商品画像をアップロードすると背景除去後に自然合成します
                   </p>
                 </div>
 
@@ -1379,20 +1459,35 @@ export default function BannerGenerator() {
                         </div>
                       )}
 
-                      {/* 商品画像オーバーレイ（背景色ゾーン付き） */}
+                      {/* 商品画像なし時のヒント */}
+                      {!productImageDataUrl && (
+                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-[11px] font-medium"
+                            style={{ background: 'rgba(0,0,0,0.45)', color: 'rgba(255,255,255,0.85)' }}>
+                            <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            </svg>
+                            商品画像をアップロードするとここに合成されます
+                          </div>
+                        </div>
+                      )}
+
+                      {/* 商品画像オーバーレイ */}
                       {productImageDataUrl && (
                         <>
-                          {/* 背景色ゾーン */}
-                          <div className="absolute inset-y-0 pointer-events-none"
-                            style={{
-                              backgroundColor: productBgColor,
-                              ...(productImagePos === 'right'
-                                ? { right: 0, width: '49%' }
-                                : productImagePos === 'left'
-                                  ? { left: 0, width: '49%' }
-                                  : { left: '25%', width: '50%' }),
-                            }} />
-                          {/* 商品画像 */}
+                          {/* 背景除去なしの場合のみ背景色ゾーンを表示 */}
+                          {!productImageCutoutUrl && (
+                            <div className="absolute inset-y-0 pointer-events-none"
+                              style={{
+                                backgroundColor: productBgColor,
+                                ...(productImagePos === 'right'
+                                  ? { right: 0, width: '49%' }
+                                  : productImagePos === 'left'
+                                    ? { left: 0, width: '49%' }
+                                    : { left: '25%', width: '50%' }),
+                              }} />
+                          )}
+                          {/* 商品画像（背景除去済みなら透過PNGを使用） */}
                           <div className="absolute pointer-events-none flex items-center"
                             style={{
                               top: '50%',
@@ -1405,7 +1500,7 @@ export default function BannerGenerator() {
                                   : { left: '1%', transform: 'translateY(-50%)' }),
                             }}>
                             {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src={productImageDataUrl} alt="商品画像" className="max-h-full max-w-full object-contain" />
+                            <img src={productImageCutoutUrl ?? productImageDataUrl} alt="商品画像" className="max-h-full max-w-full object-contain" />
                           </div>
                         </>
                       )}
