@@ -9,7 +9,8 @@ const MODEL = 'imagen-4.0-generate-001'
 export type ReasoningPoint = { icon: string; title: string; body: string }
 
 type RequestBody = {
-  productName: string
+  productName?: string
+  productImageDesc?: string
   category: string
   target: string
   catchcopy: string
@@ -155,7 +156,8 @@ async function analyzeReferenceImage(ai: GoogleGenAI, imageUrl: string): Promise
 // ─── Gemini で商品名を英語の視覚的説明に変換（Imagen 4 精度向上）────────────
 async function describeProductVisually(
   ai: GoogleGenAI,
-  productName: string,
+  productName: string | undefined,
+  productImageDesc: string | undefined,
   category: string,
   target: string,
   productFeatures?: string,
@@ -170,7 +172,8 @@ async function describeProductVisually(
         parts: [{
           text: `You are a commercial photographer's art director with deep knowledge of Japanese and global consumer brands. Convert this Japanese product into a precise English visual description for Imagen 4.
 
-Product name: "${productName}"
+${productName ? `Product name/brand/model: "${productName}"` : ''}
+${productImageDesc ? `Product image/category description: "${productImageDesc}"` : ''}
 Category: ${category || 'General'}
 Target customer: ${target}
 ${productFeatures ? `Key features: ${productFeatures}` : ''}
@@ -493,23 +496,25 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'リクエストの形式が不正です' }, { status: 400 })
   }
 
-  const { productName, category, target, catchcopy, color, size, textPosition, referenceUrl, designStyle, productImageBase64, productImageMimeType, productBgColor, productFeatures, saleInfo, campaignType, copyTone, variations } = body
+  const { productName, productImageDesc, category, target, catchcopy, color, size, textPosition, referenceUrl, designStyle, productImageBase64, productImageMimeType, productBgColor, productFeatures, saleInfo, campaignType, copyTone, variations } = body
 
-  if (!productName?.trim() || !target?.trim()) {
-    return NextResponse.json({ error: '商品名・ターゲットは必須です' }, { status: 400 })
+  if ((!productName?.trim() && !productImageDesc?.trim()) || !target?.trim()) {
+    return NextResponse.json({ error: '商品名またはイメージ・ターゲットは必須です' }, { status: 400 })
   }
 
   const ai = new GoogleGenAI({ apiKey })
   const hasProductImage = !!(productImageBase64 && productImageMimeType)
 
+  const productIdentifier = [productName, productImageDesc].filter(Boolean).join(' / ') || '商品'
+
   const [pageHints, productImageAnalysis, productVisualDesc] = await Promise.all([
     fetchPageDesignHints(referenceUrl ?? '', ai),
     hasProductImage ? analyzeProductImage(ai, productImageBase64!, productImageMimeType!) : Promise.resolve(''),
-    !hasProductImage ? describeProductVisually(ai, productName, category, target, productFeatures, saleInfo, designStyle) : Promise.resolve(''),
+    !hasProductImage ? describeProductVisually(ai, productName, productImageDesc, category, target, productFeatures, saleInfo, designStyle) : Promise.resolve(''),
   ])
 
-  const prompt = buildPrompt({ productName, category, target, catchcopy, color, textPosition, designStyle, pageHints, hasProductImage, productImageAnalysis, productBgColor, productFeatures, saleInfo, campaignType, copyTone, productVisualDesc, size })
-  const reasoning = buildReasoning({ productName, category, target, catchcopy, color, textPosition, designStyle, referenceUrl })
+  const prompt = buildPrompt({ productName: productIdentifier, category, target, catchcopy, color, textPosition, designStyle, pageHints, hasProductImage, productImageAnalysis, productBgColor, productFeatures, saleInfo, campaignType, copyTone, productVisualDesc, size })
+  const reasoning = buildReasoning({ productName: productIdentifier, category, target, catchcopy, color, textPosition, designStyle, referenceUrl })
   const aspectRatio = toImagenAspectRatio(size.width, size.height)
 
   try {

@@ -135,7 +135,8 @@ type GeneratedImage = {
 }
 
 type FormData = {
-  productName: string
+  productName: string      // 商品名・型番・ブランド（任意）
+  productImageDesc: string // 商品イメージ・カテゴリ（任意）
   category: string
   target: string
   appealText: string
@@ -434,7 +435,7 @@ export default function BannerGenerator() {
 
   // Step 1
   const [form, setForm] = useState<FormData>({
-    productName: '', category: '', target: '', appealText: '', mainColor: '#bf0000',
+    productName: '', productImageDesc: '', category: '', target: '', appealText: '', mainColor: '#bf0000',
     referenceUrl: '', designStyle: '',
     productFeatures: '', saleInfo: '', campaignType: '', copyTone: '',
   })
@@ -476,7 +477,7 @@ export default function BannerGenerator() {
   // ─── バリデーション ─────────────────────────────────────────────────────────
   const validate = () => {
     const next: Partial<FormData> = {}
-    if (!form.productName.trim()) next.productName = '商品名を入力してください'
+    if (!form.productName.trim() && !form.productImageDesc.trim()) next.productName = '商品名またはイメージのどちらかを入力してください'
     if (!form.target.trim())      next.target      = 'ターゲットを入力してください'
     setErrors(next)
     return Object.keys(next).length === 0
@@ -517,7 +518,9 @@ export default function BannerGenerator() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          productName: form.productName, category: form.category,
+          productName: form.productName || undefined,
+          productImageDesc: form.productImageDesc || undefined,
+          category: form.category,
           target: form.target, catchcopy: form.appealText,
           color: form.mainColor, size, textPosition,
           referenceUrl: form.referenceUrl || undefined,
@@ -710,20 +713,32 @@ export default function BannerGenerator() {
               </div>
 
               <div className="px-8 py-7 space-y-5">
-                {/* 商品名 */}
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">
-                    商品名 <span className="text-red-500">*</span>
-                  </label>
-                  <input type="text" value={form.productName}
-                    onChange={e => setForm(f => ({ ...f, productName: e.target.value }))}
-                    placeholder="例：プレミアムローストコーヒー 200g"
-                    className={`w-full px-4 py-3 text-sm rounded-xl border outline-none transition-all
-                      ${errors.productName
-                        ? 'border-red-400 bg-red-50 focus:ring-2 focus:ring-red-100'
-                        : 'border-slate-200 bg-white focus:border-red-400 focus:ring-2 focus:ring-red-50'}`}
-                  />
-                  {errors.productName && <p className="text-red-500 text-xs mt-1.5">{errors.productName}</p>}
+                {/* 商品名・型番・ブランド と 商品イメージ */}
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <span className="text-sm font-semibold text-slate-700">商品情報</span>
+                    <span className="text-[10px] font-normal text-slate-500 border border-slate-200 rounded-full px-2 py-0.5">どちらか一方必須</span>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-500 mb-1">商品名・型番・ブランド</label>
+                    <input type="text" value={form.productName}
+                      onChange={e => setForm(f => ({ ...f, productName: e.target.value }))}
+                      placeholder="例：Columbia YH4977、Sony WH-1000XM5、ローストコーヒー"
+                      className={`w-full px-4 py-3 text-sm rounded-xl border outline-none transition-all
+                        ${errors.productName
+                          ? 'border-red-400 bg-red-50 focus:ring-2 focus:ring-red-100'
+                          : 'border-slate-200 bg-white focus:border-red-400 focus:ring-2 focus:ring-red-50'}`}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-500 mb-1">商品イメージ・カテゴリ</label>
+                    <input type="text" value={form.productImageDesc}
+                      onChange={e => setForm(f => ({ ...f, productImageDesc: e.target.value }))}
+                      placeholder="例：うなぎ2人前、メンズTシャツ、アウトドアシューズ"
+                      className="w-full px-4 py-3 text-sm rounded-xl border border-slate-200 bg-white outline-none focus:border-red-400 focus:ring-2 focus:ring-red-50 transition-all"
+                    />
+                  </div>
+                  {errors.productName && <p className="text-red-500 text-xs mt-0.5">{errors.productName}</p>}
                 </div>
 
                 {/* カテゴリ */}
@@ -1420,7 +1435,7 @@ export default function BannerGenerator() {
                     <div className="flex items-center gap-2 mb-0.5">
                       <span className="text-[9px] font-black tracking-[0.15em] uppercase px-2 py-0.5 rounded-full"
                         style={{ background: 'linear-gradient(135deg, #ecfdf5, #d1fae5)', color: '#065f46' }}>完成</span>
-                      <h3 className="text-sm font-bold text-slate-900">{form.productName}</h3>
+                      <h3 className="text-sm font-bold text-slate-900">{[form.productName, form.productImageDesc].filter(Boolean).join(' / ')}</h3>
                     </div>
                     <p className="text-xs text-slate-400 mt-0.5 pl-0.5">
                       {generatedImage.size.label} · {form.category || '未設定'} · {form.target}
