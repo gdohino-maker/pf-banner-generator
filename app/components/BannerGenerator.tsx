@@ -30,6 +30,26 @@ const DESIGN_STYLES = [
 ] as const
 type DesignStyleId = typeof DESIGN_STYLES[number]['id']
 
+const CAMPAIGN_TYPES = [
+  { id: 'sale',    label: 'セール',       emoji: '🔥', desc: '割引・値引き訴求' },
+  { id: 'new',     label: '新商品',       emoji: '✨', desc: '新発売・新登場' },
+  { id: 'season',  label: '季節限定',     emoji: '🌸', desc: '季節・イベント向け' },
+  { id: 'ranking', label: 'ランキング',   emoji: '🏆', desc: '人気No.1・ランキング' },
+  { id: 'set',     label: 'まとめ買い',   emoji: '📦', desc: 'セット・まとめ売り' },
+  { id: 'gift',    label: 'ギフト',       emoji: '🎁', desc: 'プレゼント・贈り物' },
+] as const
+type CampaignTypeId = typeof CAMPAIGN_TYPES[number]['id']
+
+const COPY_TONES = [
+  { id: 'premium',  label: '高級感',    emoji: '💎', desc: 'プレミアム・上質' },
+  { id: 'bargain',  label: 'お得感',    emoji: '💰', desc: 'コスパ・値ごろ感' },
+  { id: 'urgent',   label: '緊急感',    emoji: '⚡', desc: '期間限定・今すぐ' },
+  { id: 'safe',     label: '安心感',    emoji: '🛡️', desc: '信頼・実績・保証' },
+  { id: 'health',   label: '健康・美容', emoji: '🌿', desc: 'ナチュラル・美容・健康' },
+  { id: 'fun',      label: '楽しさ',    emoji: '😊', desc: 'ワクワク・にぎやか' },
+] as const
+type CopyToneId = typeof COPY_TONES[number]['id']
+
 const FONT_STYLES = [
   {
     id: 'gothic' as const,
@@ -122,6 +142,10 @@ type FormData = {
   mainColor: string
   referenceUrl: string
   designStyle: DesignStyleId | ''
+  productFeatures: string
+  saleInfo: string
+  campaignType: CampaignTypeId | ''
+  copyTone: CopyToneId | ''
 }
 
 type OverlaySettings = {
@@ -377,6 +401,7 @@ export default function BannerGenerator() {
   const [form, setForm] = useState<FormData>({
     productName: '', category: '', target: '', appealText: '', mainColor: '#bf0000',
     referenceUrl: '', designStyle: '',
+    productFeatures: '', saleInfo: '', campaignType: '', copyTone: '',
   })
   const [errors, setErrors] = useState<Partial<FormData>>({})
 
@@ -387,10 +412,14 @@ export default function BannerGenerator() {
   const [activeStamp, setActiveStamp] = useState<string | null>(null)
   const [stampPosition, setStampPosition] = useState<StampPosition>('top-right')
 
+  // Step 2
+  const [variations, setVariations] = useState<1 | 2>(1)
+
   // Step 3
   const [isGenerating, setIsGenerating] = useState(false)
   const [progress, setProgress] = useState(0)
-  const [generatedImage, setGeneratedImage] = useState<GeneratedImage | null>(null)
+  const [generatedImages, setGeneratedImages] = useState<GeneratedImage[]>([])
+  const [selectedImgIdx, setSelectedImgIdx] = useState(0)
   const [generateError, setGenerateError] = useState<string | null>(null)
   const [lastPrompt, setLastPrompt] = useState<string | null>(null)
   const [showPrompt, setShowPrompt] = useState(false)
@@ -400,6 +429,9 @@ export default function BannerGenerator() {
   const [productImageDataUrl, setProductImageDataUrl] = useState<string | null>(null)
   const [productImagePos, setProductImagePos] = useState<'left' | 'center' | 'right'>('right')
   const [productBgColor, setProductBgColor] = useState<string>('#f5f5f5')
+
+  // selectedImgIdx を使った computed value — downloadCompositeより前に定義
+  const generatedImage = generatedImages[selectedImgIdx] ?? null
   const progressRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   // ─── バリデーション ─────────────────────────────────────────────────────────
@@ -427,7 +459,8 @@ export default function BannerGenerator() {
   // ─── 生成処理 ───────────────────────────────────────────────────────────────
   const handleGenerate = useCallback(async () => {
     setGenerateError(null)
-    setGeneratedImage(null)
+    setGeneratedImages([])
+    setSelectedImgIdx(0)
     setFeedback(null)
     setIsGenerating(true)
     startProgress()
@@ -454,18 +487,25 @@ export default function BannerGenerator() {
           productImageBase64,
           productImageMimeType,
           productBgColor: productImageDataUrl ? productBgColor : undefined,
+          productFeatures: form.productFeatures || undefined,
+          saleInfo: form.saleInfo || undefined,
+          campaignType: form.campaignType || undefined,
+          copyTone: form.copyTone || undefined,
+          variations,
         }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || `サーバーエラー (${res.status})`)
       stopProgress(100)
       setLastPrompt(data.prompt ?? null)
-      setGeneratedImage({
-        id: Date.now().toString(), size, dataUrl: data.imageDataUrl,
+      const urls: string[] = data.imageDataUrls ?? (data.imageDataUrl ? [data.imageDataUrl] : [])
+      setGeneratedImages(urls.map((dataUrl, i) => ({
+        id: `${Date.now()}_${i}`,
+        size, dataUrl,
         usedAspectRatio: data.usedAspectRatio ?? '',
-        reasoning: data.reasoning ?? [],
+        reasoning: i === 0 ? (data.reasoning ?? []) : [],
         imageSource: data.imageSource ?? 'imagen4',
-      })
+      })))
     } catch (err) {
       stopProgress(0)
       setGenerateError(err instanceof Error ? err.message : '生成に失敗しました')
@@ -488,7 +528,8 @@ export default function BannerGenerator() {
   const backToStep2 = () => { setStep(2); window.scrollTo({ top: 0, behavior: 'smooth' }) }
   const resetAll = () => {
     setStep(1)
-    setGeneratedImage(null)
+    setGeneratedImages([])
+    setSelectedImgIdx(0)
     setGenerateError(null)
     setFeedback(null)
     setProductImageDataUrl(null)
@@ -654,6 +695,21 @@ export default function BannerGenerator() {
                   </select>
                 </div>
 
+                {/* 商品の特長・USP */}
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">
+                    商品の特長・セールスポイント
+                    <span className="ml-2 text-[10px] font-normal text-slate-400 border border-slate-200 rounded-full px-2 py-0.5">任意</span>
+                  </label>
+                  <textarea value={form.productFeatures}
+                    onChange={e => setForm(f => ({ ...f, productFeatures: e.target.value }))}
+                    placeholder={'例：\n・無添加・オーガニック原料使用\n・楽天ランキング1位獲得\n・1回分あたり〇〇円のコスパ'}
+                    rows={3}
+                    className="w-full px-4 py-3 text-sm rounded-xl border border-slate-200 bg-white outline-none focus:border-red-400 focus:ring-2 focus:ring-red-50 transition-all resize-none"
+                  />
+                  <p className="text-[11px] text-slate-400 mt-1.5">入力するとAIがこれらの特長を画像のビジュアルで表現します</p>
+                </div>
+
                 {/* ターゲット */}
                 <div>
                   <label className="block text-sm font-semibold text-slate-700 mb-1.5">
@@ -685,6 +741,80 @@ export default function BannerGenerator() {
                         : 'border-slate-200 bg-white focus:border-red-400 focus:ring-2 focus:ring-red-50'}`}
                   />
                   {errors.appealText && <p className="text-red-500 text-xs mt-1.5">{errors.appealText}</p>}
+                </div>
+
+                {/* 価格・割引情報 */}
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">
+                    価格・割引情報
+                    <span className="ml-2 text-[10px] font-normal text-slate-400 border border-slate-200 rounded-full px-2 py-0.5">任意</span>
+                  </label>
+                  <input type="text" value={form.saleInfo}
+                    onChange={e => setForm(f => ({ ...f, saleInfo: e.target.value }))}
+                    placeholder="例：30%OFF、¥2,980（税込）、定価の半額、送料込み"
+                    className="w-full px-4 py-3 text-sm rounded-xl border border-slate-200 bg-white outline-none focus:border-red-400 focus:ring-2 focus:ring-red-50 transition-all"
+                  />
+                  <p className="text-[11px] text-slate-400 mt-1.5">AIが商業的なエネルギーをビジュアルに反映します</p>
+                </div>
+
+                {/* キャンペーン種別 */}
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2.5">
+                    キャンペーン種別
+                    <span className="ml-2 text-[10px] font-normal text-slate-400 border border-slate-200 rounded-full px-2 py-0.5">任意</span>
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {CAMPAIGN_TYPES.map(ct => (
+                      <button key={ct.id}
+                        onClick={() => setForm(f => ({ ...f, campaignType: f.campaignType === ct.id ? '' : ct.id as CampaignTypeId }))}
+                        className="flex items-center gap-2 px-3 py-2.5 rounded-xl border text-left transition-all hover:scale-[1.02] active:scale-100"
+                        style={form.campaignType === ct.id ? {
+                          background: 'linear-gradient(135deg, #fff1f2, #ffe4e6)',
+                          borderColor: '#fca5a5',
+                          boxShadow: '0 0 0 2px rgba(220,38,38,0.15)',
+                        } : { borderColor: '#e2e8f0', background: 'white' }}>
+                        <span className="text-base leading-none flex-shrink-0">{ct.emoji}</span>
+                        <div className="min-w-0">
+                          <p className={`text-xs font-bold leading-none mb-0.5 ${form.campaignType === ct.id ? 'text-red-700' : 'text-slate-700'}`}>{ct.label}</p>
+                          <p className="text-[10px] text-slate-400 leading-tight">{ct.desc}</p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                  {form.campaignType && (
+                    <button onClick={() => setForm(f => ({ ...f, campaignType: '' }))}
+                      className="mt-2 text-xs text-slate-400 hover:text-slate-600 transition-colors">選択をクリア</button>
+                  )}
+                </div>
+
+                {/* コピートーン */}
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2.5">
+                    コピートーン
+                    <span className="ml-2 text-[10px] font-normal text-slate-400 border border-slate-200 rounded-full px-2 py-0.5">任意</span>
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {COPY_TONES.map(ct => (
+                      <button key={ct.id}
+                        onClick={() => setForm(f => ({ ...f, copyTone: f.copyTone === ct.id ? '' : ct.id as CopyToneId }))}
+                        className="flex items-center gap-2 px-3 py-2.5 rounded-xl border text-left transition-all hover:scale-[1.02] active:scale-100"
+                        style={form.copyTone === ct.id ? {
+                          background: 'linear-gradient(135deg, #fff1f2, #ffe4e6)',
+                          borderColor: '#fca5a5',
+                          boxShadow: '0 0 0 2px rgba(220,38,38,0.15)',
+                        } : { borderColor: '#e2e8f0', background: 'white' }}>
+                        <span className="text-base leading-none flex-shrink-0">{ct.emoji}</span>
+                        <div className="min-w-0">
+                          <p className={`text-xs font-bold leading-none mb-0.5 ${form.copyTone === ct.id ? 'text-red-700' : 'text-slate-700'}`}>{ct.label}</p>
+                          <p className="text-[10px] text-slate-400 leading-tight">{ct.desc}</p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                  {form.copyTone && (
+                    <button onClick={() => setForm(f => ({ ...f, copyTone: '' }))}
+                      className="mt-2 text-xs text-slate-400 hover:text-slate-600 transition-colors">選択をクリア</button>
+                  )}
                 </div>
 
                 {/* 参照URL */}
@@ -1013,6 +1143,25 @@ export default function BannerGenerator() {
                       )}
                     </div>
 
+                    {/* 生成パターン数 */}
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-600 mb-2">生成パターン数</label>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        {([
+                          { value: 1 as const, label: '1パターン', desc: '高速・通常' },
+                          { value: 2 as const, label: '2パターン', desc: 'A/B比較（2倍の時間）' },
+                        ]).map(opt => (
+                          <button key={opt.value} onClick={() => setVariations(opt.value)}
+                            className={`py-2.5 rounded-xl border text-left px-3 transition-all
+                              ${variations === opt.value ? 'border-blue-400 text-blue-700' : 'border-slate-200 text-slate-500 hover:bg-slate-50'}`}
+                            style={variations === opt.value ? { background: 'linear-gradient(135deg, #eff6ff, #dbeafe)' } : {}}>
+                            <p className="text-xs font-bold">{opt.label}</p>
+                            <p className="text-[10px] text-slate-400 mt-0.5">{opt.desc}</p>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
                     {/* 出力サイズ */}
                     <div>
                       <label className="block text-xs font-semibold text-gray-600 mb-2">出力サイズ</label>
@@ -1146,8 +1295,24 @@ export default function BannerGenerator() {
             )}
 
             {/* 結果 */}
-            {!isGenerating && generatedImage && (
+            {!isGenerating && generatedImages.length > 0 && (
               <div className="space-y-4">
+                {/* 2パターン選択UI */}
+                {generatedImages.length > 1 && (
+                  <div className="flex gap-3">
+                    {generatedImages.map((img, i) => (
+                      <button key={img.id} onClick={() => setSelectedImgIdx(i)}
+                        className={`flex-1 rounded-xl overflow-hidden border-2 transition-all ${selectedImgIdx === i ? 'border-red-400 shadow-lg shadow-red-100' : 'border-slate-200 opacity-60 hover:opacity-80'}`}>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={img.dataUrl} alt={`パターン${i + 1}`} className="w-full object-cover" style={{ aspectRatio: img.size.aspect, maxHeight: '120px' }} />
+                        <div className={`text-center py-1.5 text-xs font-bold ${selectedImgIdx === i ? 'bg-red-50 text-red-700' : 'bg-slate-50 text-slate-500'}`}>
+                          パターン {String.fromCharCode(65 + i)} {selectedImgIdx === i ? '✓ 選択中' : ''}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
                 {/* 生成情報ヘッダー */}
                 <div className="flex items-center justify-between px-1">
                   <div>
@@ -1165,7 +1330,7 @@ export default function BannerGenerator() {
                       className="text-xs text-slate-500 border border-slate-200 bg-white px-3 py-1.5 rounded-lg hover:bg-slate-50 transition-colors">
                       設定を変更
                     </button>
-                    <button onClick={() => { setGeneratedImage(null); handleGenerate() }}
+                    <button onClick={() => { setGeneratedImages([]); handleGenerate() }}
                       className="flex items-center gap-1.5 text-xs font-medium text-slate-600 border border-slate-200 bg-white px-3 py-1.5 rounded-lg hover:bg-slate-50 transition-colors">
                       <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />

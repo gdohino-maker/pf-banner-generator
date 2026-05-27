@@ -21,6 +21,11 @@ type RequestBody = {
   productImageBase64?: string
   productImageMimeType?: string
   productBgColor?: string
+  productFeatures?: string
+  saleInfo?: string
+  campaignType?: string
+  copyTone?: string
+  variations?: 1 | 2
 }
 
 // ─── デザインスタイル → プロンプト変換 ────────────────────────────────────────
@@ -37,6 +42,26 @@ const DESIGN_STYLE_PROMPTS: Record<string, string> = {
     'Ultra-modern cool stylish commercial photography. High-contrast dark or pure-white background. Sharp geometric angular composition. Fashion-forward editorial aesthetic. Contemporary luxury magazine quality.',
   natural:
     'Natural organic lifestyle photography. Soft warm natural daylight with gentle bokeh. Earth tones, botanical elements, wooden textures, linen. Clean airy eco-friendly atmosphere.',
+}
+
+// ─── キャンペーン種別プロンプト ───────────────────────────────────────────────
+const CAMPAIGN_TYPE_PROMPTS: Record<string, string> = {
+  sale:    'High-energy SALE commercial atmosphere. Bold dynamic composition communicating exceptional VALUE and savings. Strong visual urgency with exciting energy.',
+  new:     'Fresh exciting NEW PRODUCT launch energy. Premium reveal atmosphere. Discovery excitement. Clean contemporary modern staging.',
+  season:  'Seasonal celebration atmosphere with carefully chosen natural seasonal elements. Festive mood perfectly aligned with the season.',
+  ranking: 'Award-winning best-seller confidence and prestige. Popular choice authority. Trophy-quality premium achievement atmosphere.',
+  set:     'Abundance and generous value composition. Products arranged to emphasize completeness and great quantity. Compelling set deal presentation.',
+  gift:    'Elegant premium gift-giving atmosphere. Warm sophisticated presentation. Special occasion luxury. Thoughtful and aspirational.',
+}
+
+// ─── コピートーンプロンプト ───────────────────────────────────────────────────
+const COPY_TONE_PROMPTS: Record<string, string> = {
+  premium:  'Ultra-premium luxury commercial photography. Elegant minimalist background — deep black or pure white. High-end material quality. Aspirational sophisticated restraint.',
+  bargain:  'Bright cheerful inviting accessible atmosphere. Warm approachable colors. Open friendly composition clearly communicating value and accessibility.',
+  urgent:   'Dynamic high-contrast dramatic lighting. Bold composition with tension and immediacy. Strong visual energy suggesting limited-time opportunity.',
+  safe:     'Clean professional trustworthy photography. Stable soft corporate lighting. Reliable calm authoritative atmosphere suggesting quality assurance.',
+  health:   'Fresh organic natural photography. Soft warm natural window light. Clean botanical wellness lifestyle. Vitality and healthy living.',
+  fun:      'Vibrant playful cheerful photography. Bright saturated joyful colors. Dynamic energetic happy composition. Positive celebratory energy.',
 }
 
 const DESIGN_STYLE_JA: Record<string, string> = {
@@ -245,6 +270,10 @@ function buildPrompt(input: {
   hasProductImage?: boolean
   productImageAnalysis?: string
   productBgColor?: string
+  productFeatures?: string
+  saleInfo?: string
+  campaignType?: string
+  copyTone?: string
 }): string {
   const colorDesc = hexToColorDescription(input.color)
   const categoryStyle = CATEGORY_STYLE[input.category] ?? CATEGORY_STYLE['その他']
@@ -273,6 +302,10 @@ function buildPrompt(input: {
     `SUBJECT: Highly detailed commercial photograph of "${input.productName}".`,
     `AUDIENCE & MOOD: Designed to appeal to "${input.target}". Visual tone color grading and composition must resonate strongly with this demographic.`,
     stylePrompt ? `DESIGN STYLE — OVERRIDE PRIORITY: ${stylePrompt}` : `CATEGORY STYLE — ${input.category || 'General'}: ${categoryStyle}`,
+    input.campaignType && CAMPAIGN_TYPE_PROMPTS[input.campaignType] ? `CAMPAIGN ATMOSPHERE: ${CAMPAIGN_TYPE_PROMPTS[input.campaignType]}` : '',
+    input.copyTone && COPY_TONE_PROMPTS[input.copyTone] ? `VISUAL TONE — OVERRIDE: ${COPY_TONE_PROMPTS[input.copyTone]}` : '',
+    input.productFeatures?.trim() ? `PRODUCT USP VISUALIZATION: This product has the following key selling points: "${input.productFeatures}". Visualize these advantages through premium material quality, lifestyle context, and product presentation — express them visually without any text.` : '',
+    input.saleInfo?.trim() ? `COMMERCIAL CONTEXT: This product is promoted with: "${input.saleInfo}". Reflect this commercial energy in the visual atmosphere (dynamic, value-communicating, exciting) — without showing any text, numbers, or pricing.` : '',
     input.pageHints ? input.pageHints : '',
     `TECHNICAL: 8K resolution photorealistic sharp focus professional studio lighting. Premium contemporary color grade.`,
     `COLOR THEME: Dominant accent and background color must be ${colorDesc}. Use this color as intentional design element throughout.`,
@@ -352,7 +385,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'リクエストの形式が不正です' }, { status: 400 })
   }
 
-  const { productName, category, target, catchcopy, color, size, textPosition, referenceUrl, designStyle, productImageBase64, productImageMimeType, productBgColor } = body
+  const { productName, category, target, catchcopy, color, size, textPosition, referenceUrl, designStyle, productImageBase64, productImageMimeType, productBgColor, productFeatures, saleInfo, campaignType, copyTone, variations } = body
 
   if (!productName?.trim() || !target?.trim() || !catchcopy?.trim()) {
     return NextResponse.json({ error: '商品名・ターゲット・訴求テキストは必須です' }, { status: 400 })
@@ -366,31 +399,37 @@ export async function POST(req: NextRequest) {
     hasProductImage ? analyzeProductImage(ai, productImageBase64!, productImageMimeType!) : Promise.resolve(''),
   ])
 
-  const prompt = buildPrompt({ productName, category, target, catchcopy, color, textPosition, designStyle, pageHints, hasProductImage, productImageAnalysis, productBgColor })
+  const prompt = buildPrompt({ productName, category, target, catchcopy, color, textPosition, designStyle, pageHints, hasProductImage, productImageAnalysis, productBgColor, productFeatures, saleInfo, campaignType, copyTone })
   const reasoning = buildReasoning({ productName, category, target, catchcopy, color, textPosition, designStyle, referenceUrl })
   const aspectRatio = toImagenAspectRatio(size.width, size.height)
 
   try {
+    const numImages = variations === 2 ? 2 : 1
     const response = await ai.models.generateImages({
       model: MODEL,
       prompt,
       config: {
-        numberOfImages: 1,
+        numberOfImages: numImages,
         aspectRatio,
         outputMimeType: 'image/jpeg',
       },
     })
 
-    const imageBytes = response.generatedImages?.[0]?.image?.imageBytes
-    if (!imageBytes) {
+    const generatedImages = response.generatedImages ?? []
+    if (generatedImages.length === 0) {
       return NextResponse.json(
         { error: '画像が生成されませんでした。コンテンツポリシーに抵触した可能性があります。' },
         { status: 422 }
       )
     }
 
+    const imageDataUrls = generatedImages
+      .map(img => img.image?.imageBytes ? `data:image/jpeg;base64,${img.image.imageBytes}` : null)
+      .filter(Boolean) as string[]
+
     return NextResponse.json({
-      imageDataUrl: `data:image/jpeg;base64,${imageBytes}`,
+      imageDataUrls,
+      imageDataUrl: imageDataUrls[0],
       usedAspectRatio: aspectRatio,
       imageSource: 'imagen4',
       prompt,
