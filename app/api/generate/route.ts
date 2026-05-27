@@ -74,7 +74,7 @@ const DESIGN_STYLE_JA: Record<string, string> = {
 }
 
 // ─── 楽天URLからページデザインヒント取得 ─────────────────────────────────────
-async function fetchPageDesignHints(url: string): Promise<string> {
+async function fetchPageDesignHints(url: string, ai: GoogleGenAI): Promise<string> {
   if (!url?.trim()) return ''
   try {
     const res = await fetch(url, {
@@ -99,15 +99,54 @@ async function fetchPageDesignHints(url: string): Promise<string> {
     const ogDesc =
       html.match(/property=["']og:description["'][^>]*content=["']([^"']+)["']/i)?.[1] ||
       html.match(/name=["']description["'][^>]*content=["']([^"']+)["']/i)?.[1]
+    const ogImage =
+      html.match(/property=["']og:image["'][^>]*content=["']([^"']+)["']/i)?.[1] ||
+      html.match(/content=["']([^"']+)["'][^>]*property=["']og:image["']/i)?.[1]
 
     const hints: string[] = []
     if (themeColor) hints.push(`reference page accent color: ${themeColor}`)
     if (ogTitle)    hints.push(`reference product title: "${clean(ogTitle).slice(0, 80)}"`)
     if (ogDesc)     hints.push(`reference page context: "${clean(ogDesc).slice(0, 150)}"`)
 
-    return hints.length > 0
+    let imageAnalysis = ''
+    if (ogImage) {
+      imageAnalysis = await analyzeReferenceImage(ai, ogImage)
+    }
+
+    const hintStr = hints.length > 0
       ? `REFERENCE PAGE DESIGN HINTS (from ${url.slice(0, 50)}): ${hints.join('. ')}. Align visual style with this page's design language.`
       : ''
+
+    return [hintStr, imageAnalysis].filter(Boolean).join(' ')
+  } catch {
+    return ''
+  }
+}
+
+// ─── og:image を分析してデザイン参照情報を取得 ───────────────────────────────
+async function analyzeReferenceImage(ai: GoogleGenAI, imageUrl: string): Promise<string> {
+  try {
+    const res = await fetch(imageUrl, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; BannerBot/1.0)' },
+      signal: AbortSignal.timeout(6000),
+    })
+    if (!res.ok) return ''
+    const contentType = res.headers.get('content-type') ?? ''
+    if (!contentType.startsWith('image/')) return ''
+    const buffer = await res.arrayBuffer()
+    const base64 = Buffer.from(buffer).toString('base64')
+    const mimeType = contentType.split(';')[0].trim()
+    const result = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: [{
+        role: 'user',
+        parts: [
+          { inlineData: { mimeType, data: base64 } },
+          { text: 'Analyze this product/banner image as a design reference. English only, max 80 words: 1) exact dominant colors and secondary colors with their mood, 2) visual style (premium/casual/energetic/etc) and aesthetic category, 3) background style and lighting character, 4) photography technique and atmosphere. This will be used to match the visual language of a new banner.' },
+        ],
+      }],
+    })
+    return result.text?.trim() ? `REFERENCE IMAGE ANALYSIS: ${result.text.trim()}` : ''
   } catch {
     return ''
   }
@@ -129,26 +168,29 @@ async function describeProductVisually(
       contents: [{
         role: 'user',
         parts: [{
-          text: `You are a commercial photographer's art director. Convert this Japanese product information into a precise English visual description for an AI image generator (Imagen 4).
+          text: `You are a commercial photographer's art director with deep knowledge of Japanese and global consumer brands. Convert this Japanese product into a precise English visual description for Imagen 4.
 
 Product name: "${productName}"
 Category: ${category || 'General'}
 Target customer: ${target}
 ${productFeatures ? `Key features: ${productFeatures}` : ''}
-${saleInfo ? `Promotion: ${saleInfo}` : ''}
-${designStyle ? `Design style: ${designStyle}` : ''}
+${saleInfo ? `Promotion context: ${saleInfo}` : ''}
+${designStyle ? `Desired design style: ${designStyle}` : ''}
 
-STRICT RULES for your output:
-1. Write 2-3 sentences of English ONLY
-2. Describe the PRODUCT VISUALLY: its physical appearance, colors, textures, materials, shape
-3. Describe the ideal PHOTOGRAPHIC SCENE or SETTING that makes this product most appealing
-4. NEVER include any numbers, weights (g, kg, ml, L), prices, quantities, or measurements
-5. NEVER include any text, words, letters that would appear on packaging or labels
-6. Use precise visual vocabulary: specific colors, textures, materials, light quality
-7. Make it photorealistic commercial photography language
+CRITICAL — BRAND KNOWLEDGE: If the product name references a KNOWN BRAND or product line (examples: Columbia outdoor shoes = navy blue/orange/grey rugged trail aesthetics; Dyson = sleek silver-purple technology; Asahi beer = golden crisp refreshing; Meiji chocolate = warm brown indulgent; Nike = bold dynamic athletic; Sony = precision minimalist dark premium; Nikon = professional photography dark matte), USE YOUR ACTUAL KNOWLEDGE of:
+- The brand's specific signature colors
+- The product's actual physical appearance and materials
+- The brand's distinctive photography and advertising aesthetic
+- The typical lifestyle context they use in commercial photography
 
-GOOD EXAMPLE for "ローストコーヒー300g":
-"Premium dark roast coffee beans in warm espresso-brown tones, matte kraft paper bag with elegant gold embossing, aromatic steam rising from a freshly brewed single-origin pour. Moody café atmosphere with warm amber backlight and dark wooden surfaces."
+STRICT RULES:
+1. Write 3-4 sentences of precise English ONLY
+2. Describe the product's ACTUAL PHYSICAL APPEARANCE with specific brand details (real colors, materials, signature design elements)
+3. Describe the IDEAL PHOTOGRAPHIC SCENE in the brand's established aesthetic
+4. NEVER include numbers, weights (g, kg, ml), prices, quantities, measurements
+5. NEVER include text or letters that would appear on packaging/labels
+6. Use precise color names: "Columbia's signature arctic white and graphite grey mesh upper with orange heel accents" not just "white shoe"
+7. Professional commercial photography language
 
 Output ONLY the English visual description, no explanations, no Japanese.`,
         }]
@@ -191,6 +233,22 @@ function toImagenAspectRatio(width: number, height: number): string {
   if (ratio >= 0.84) return '1:1'
   if (ratio >= 0.6) return '3:4'
   return '9:16'
+}
+
+// ─── サイズ比率 → 構図ヒント（Imagen 4 クロップ対応）────────────────────────
+function getSizeCompositionHint(width: number, height: number): string {
+  const ratio = width / height
+  if (ratio >= 5) {
+    return 'CRITICAL COMPOSITION — ULTRA-WIDE PANORAMIC BANNER: The generated 16:9 image will be center-cropped to an extreme horizontal strip. ONLY the center vertical third of the image will be visible — the top third and bottom third will be completely cut off. Design exclusively for the horizontal center band: use a pure horizontal gradient flow, bokeh elements clustered in the center height zone, no visual interest near top or bottom edges.'
+  }
+  if (ratio >= 2.5) {
+    return 'WIDE HORIZONTAL BANNER COMPOSITION: This image will be cropped to a wide strip. Keep all atmospheric visual elements within the center half vertically. Use a strong left-to-right horizontal gradient flow. The final result should feel like a cinematic panoramic sweep.'
+  }
+  if (ratio >= 1.6) {
+    return 'STANDARD HORIZONTAL BANNER: Classic horizontal commercial banner composition. Left side features the main atmospheric color for text legibility. Right side transitions to the product zone. Balanced horizontal flow with natural depth.'
+  }
+  // Square
+  return 'SQUARE FORMAT: Full square balanced composition. The atmospheric gradient and bokeh should flow from corner to corner with equal visual weight on all four sides. No strong horizontal or vertical bias — omnidirectional soft light diffusion.'
 }
 
 // ─── Hex → 自然言語カラー名（英語プロンプト用）────────────────────────────────
@@ -322,7 +380,9 @@ function buildPrompt(input: {
   campaignType?: string
   copyTone?: string
   productVisualDesc?: string
+  size?: { width: number; height: number }
 }): string {
+  const compositionHint = input.size ? getSizeCompositionHint(input.size.width, input.size.height) : ''
   const colorDesc = hexToColorDescription(input.color)
   const categoryStyle = CATEGORY_STYLE[input.category] ?? CATEGORY_STYLE['その他']
   const spaceDesc = textPositionToSpaceDesc(input.textPosition ?? 'bottom-left')
@@ -345,10 +405,12 @@ function buildPrompt(input: {
 
   return [
     `COMMERCIAL BANNER BACKGROUND ONLY: Generate a pure atmospheric background for a "${input.productName}" banner. This is a background layer — the product photo is composited in post-production. GENERATE ZERO PRODUCTS, ZERO OBJECTS, ZERO MERCHANDISE, ZERO PACKAGING, ZERO BOTTLES, ZERO BAGS, ZERO CUPS — background environment only.`,
+    compositionHint ? compositionHint : '',
     `TARGET AUDIENCE: "${input.target}".`,
     stylePrompt ? `VISUAL STYLE: ${stylePrompt}` : `CATEGORY ATMOSPHERE: ${categoryStyle}`,
     input.campaignType && CAMPAIGN_TYPE_PROMPTS[input.campaignType] ? `CAMPAIGN ENERGY: ${CAMPAIGN_TYPE_PROMPTS[input.campaignType]}` : '',
     input.copyTone && COPY_TONE_PROMPTS[input.copyTone] ? `TONE: ${COPY_TONE_PROMPTS[input.copyTone]}` : '',
+    input.catchcopy?.trim() ? `MOOD & ATMOSPHERE: The banner's message is "${input.catchcopy}" — let this emotional tone subtly influence the atmospheric color temperature and energy of the background.` : '',
     atmosphereHint,
     input.productImageAnalysis ? `COLOR HARMONY: ${input.productImageAnalysis}` : '',
     input.pageHints ? input.pageHints : '',
@@ -441,12 +503,12 @@ export async function POST(req: NextRequest) {
   const hasProductImage = !!(productImageBase64 && productImageMimeType)
 
   const [pageHints, productImageAnalysis, productVisualDesc] = await Promise.all([
-    fetchPageDesignHints(referenceUrl ?? ''),
+    fetchPageDesignHints(referenceUrl ?? '', ai),
     hasProductImage ? analyzeProductImage(ai, productImageBase64!, productImageMimeType!) : Promise.resolve(''),
     !hasProductImage ? describeProductVisually(ai, productName, category, target, productFeatures, saleInfo, designStyle) : Promise.resolve(''),
   ])
 
-  const prompt = buildPrompt({ productName, category, target, catchcopy, color, textPosition, designStyle, pageHints, hasProductImage, productImageAnalysis, productBgColor, productFeatures, saleInfo, campaignType, copyTone, productVisualDesc })
+  const prompt = buildPrompt({ productName, category, target, catchcopy, color, textPosition, designStyle, pageHints, hasProductImage, productImageAnalysis, productBgColor, productFeatures, saleInfo, campaignType, copyTone, productVisualDesc, size })
   const reasoning = buildReasoning({ productName, category, target, catchcopy, color, textPosition, designStyle, referenceUrl })
   const aspectRatio = toImagenAspectRatio(size.width, size.height)
 

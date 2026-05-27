@@ -548,8 +548,7 @@ export default function BannerGenerator() {
       stopProgress(0)
       setGenerateError(err instanceof Error ? err.message : '生成に失敗しました')
     } finally { setIsGenerating(false) }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form, selectedSizeIdx, overlay])
+  }, [form, selectedSizeIdx, overlay, productImageDataUrl, productBgColor, variations])
 
   // ─── ステップ遷移 ───────────────────────────────────────────────────────────
   const goToStep2 = () => {
@@ -1254,14 +1253,36 @@ export default function BannerGenerator() {
                                 className={`flex items-center gap-2.5 px-3 py-2 rounded-lg border cursor-pointer transition-colors
                                   ${selectedSizeIdx === idx ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:bg-gray-50'}`}>
                                 <input type="radio" name="bannerSize" checked={selectedSizeIdx === idx}
-                                  onChange={() => setSelectedSizeIdx(idx)}
+                                  onChange={() => {
+                                    setSelectedSizeIdx(idx)
+                                    // サイズに合わせてテキスト配置を自動最適化
+                                    const r = size.width / size.height
+                                    if (r >= 0.84 && r <= 1.19) {
+                                      // スクエア → 中央
+                                      setOverlay(o => ({ ...o, hAlign: 'center', vAlign: 'bottom' }))
+                                    } else if (r >= 5) {
+                                      // 超横長 → 左下
+                                      setOverlay(o => ({ ...o, hAlign: 'left', vAlign: 'bottom' }))
+                                    } else {
+                                      // 横長 → 左
+                                      setOverlay(o => ({ ...o, hAlign: 'left', vAlign: 'bottom' }))
+                                    }
+                                  }}
                                   className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />
                                 <div className="flex-1 min-w-0">
                                   <p className="text-xs font-medium text-slate-800 truncate">{size.label}</p>
+                                  {(() => {
+                                    const r = size.width / size.height
+                                    if (r >= 5) return <p className="text-[10px] text-amber-500 font-medium">超横長 — 中央帯のみ表示</p>
+                                    if (r >= 2.5) return <p className="text-[10px] text-orange-400">横長 — 上下クロップあり</p>
+                                    if (r >= 0.84 && r <= 1.19) return <p className="text-[10px] text-blue-400">スクエア — 1:1生成</p>
+                                    return null
+                                  })()}
                                 </div>
-                                <div className="rounded-md flex-shrink-0" style={{ background: 'linear-gradient(135deg, #e2e8f0, #f1f5f9)',
-                                    width: `${Math.min(38, (size.width / size.height) * 15)}px`,
-                                    height: `${Math.min(15, (size.height / size.width) * 38)}px`,
+                                <div className="rounded flex-shrink-0 border border-slate-200" style={{
+                                    background: selectedSizeIdx === idx ? 'linear-gradient(135deg, #bfdbfe, #dbeafe)' : 'linear-gradient(135deg, #e2e8f0, #f1f5f9)',
+                                    width: `${Math.round(Math.min(44, (size.width / size.height) * 12))}px`,
+                                    height: `${Math.round(Math.min(12, (size.height / size.width) * 44))}px`,
                                   }} />
                               </label>
                             ))}
