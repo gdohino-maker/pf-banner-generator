@@ -433,8 +433,8 @@ export async function POST(req: NextRequest) {
 
   const { productName, category, target, catchcopy, color, size, textPosition, referenceUrl, designStyle, productImageBase64, productImageMimeType, productBgColor, productFeatures, saleInfo, campaignType, copyTone, variations } = body
 
-  if (!productName?.trim() || !target?.trim() || !catchcopy?.trim()) {
-    return NextResponse.json({ error: '商品名・ターゲット・訴求テキストは必須です' }, { status: 400 })
+  if (!productName?.trim() || !target?.trim()) {
+    return NextResponse.json({ error: '商品名・ターゲットは必須です' }, { status: 400 })
   }
 
   const ai = new GoogleGenAI({ apiKey })
