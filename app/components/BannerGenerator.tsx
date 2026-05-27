@@ -92,12 +92,13 @@ const STAMP_POSITIONS = [
 ] as const
 type StampPosition = typeof STAMP_POSITIONS[number]['id']
 
+// cqwPct = バナー幅に対する% (CSS/Canvas共通) — プレビューとDLで同一比率になる
 const TEXT_SIZES = [
-  { id: 'xs' as const, label: '極小', cssClamp: 'clamp(7px, 1.8cqw, 12px)',  canvasScale: 0.55 },
-  { id: 'sm' as const, label: '小',   cssClamp: 'clamp(9px, 2.4cqw, 17px)',  canvasScale: 0.80 },
-  { id: 'md' as const, label: '中',   cssClamp: 'clamp(11px, 3cqw, 22px)',   canvasScale: 1.00 },
-  { id: 'lg' as const, label: '大',   cssClamp: 'clamp(14px, 4.2cqw, 32px)', canvasScale: 1.40 },
-  { id: 'xl' as const, label: '特大', cssClamp: 'clamp(18px, 5.8cqw, 44px)', canvasScale: 1.85 },
+  { id: 'xs' as const, label: '極小', cqwPct: 1.8 },
+  { id: 'sm' as const, label: '小',   cqwPct: 2.4 },
+  { id: 'md' as const, label: '中',   cqwPct: 3.0 },
+  { id: 'lg' as const, label: '大',   cqwPct: 4.2 },
+  { id: 'xl' as const, label: '特大', cqwPct: 5.8 },
 ]
 type TextSizeId = typeof TEXT_SIZES[number]['id']
 
@@ -258,8 +259,9 @@ async function renderToCanvas(
 
   if (text.trim()) {
     const fontStyle = FONT_STYLES.find(f => f.id === fontStyleId)!
-    const sizeScale = TEXT_SIZES.find(s => s.id === overlay.textSizeId)?.canvasScale ?? 1.0
-    const fontSize = Math.round(Math.max(12, Math.min(ch * 0.17, 80)) * sizeScale)
+    // cw基準で計算 → CSSのcqw単位と完全一致
+    const cqwPct = (TEXT_SIZES.find(s => s.id === overlay.textSizeId)?.cqwPct ?? 3.0) / 100
+    const fontSize = Math.round(Math.max(8, cw * cqwPct))
     const lineHeight = fontSize * 1.35
     const padding = Math.round(Math.max(20, cw * 0.035))
     const maxTextWidth = cw * 0.60
@@ -1196,7 +1198,7 @@ export default function BannerGenerator() {
                               color: overlay.textColor === 'white' ? '#ffffff' : '#111111',
                               textShadow: textShadowCSS,
                               fontFamily: activeFontStyle.cssVar,
-                              fontSize: TEXT_SIZES.find(s => s.id === overlay.textSizeId)?.cssClamp ?? 'clamp(11px, 3cqw, 22px)',
+                              fontSize: `max(8px, ${TEXT_SIZES.find(s => s.id === overlay.textSizeId)?.cqwPct ?? 3}cqw)`,
                               wordBreak: 'break-all',
                             }}>
                             {form.appealText}
