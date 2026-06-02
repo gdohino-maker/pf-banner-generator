@@ -29,40 +29,40 @@ type RequestBody = {
   variations?: 1 | 2
 }
 
-// ─── デザインスタイル → プロンプト変換 ────────────────────────────────────────
+// ─── デザインスタイル → 背景ムード（物体・商品を描写しない）─────────────────
 const DESIGN_STYLE_PROMPTS: Record<string, string> = {
   professional:
-    'High-end professional commercial photography. Clean minimalist composition. Premium sophisticated materials and refined lighting. Corporate elegance. Muted tones with intentional accent.',
+    'Refined premium color palette with muted tones and deep shadows. Precise studio lighting with clean soft-box quality. Elegant, restrained, corporate sophistication expressed purely through light and gradient.',
   pop:
-    'Vibrant pop art inspired commercial photography. Bold saturated colors. Dynamic energetic composition. Fun playful atmosphere with strong contrast and cheerful energy.',
+    'Vibrant bold saturated color gradient. High-energy contrasting colors — bright primary tones with dynamic bokeh bursts. Fun cheerful electric atmosphere through pure color and light.',
   cute:
-    'Kawaii cute Japanese style photography. Soft pastel palette — cherry blossom pink, mint green, lavender, cream white. Warm cozy atmosphere. Gentle rounded elements. Sweet charming aesthetic.',
+    'Soft kawaii pastel gradient — cherry blossom pink, mint green, lavender, cream white. Warm diffused light with gentle rounded bokeh orbs. Sweet charming atmosphere through delicate color transitions.',
   appetizing:
-    'Maximum appetite appeal photography. Sizzle effect with visible steam wisps and glistening water droplets. Rich saturated colors evoking freshness and taste. Close-up macro textures showing irresistible food details.',
+    'Rich warm amber and golden gradient. Saturated warm tones evoking richness and appetite. Soft glowing studio light suggesting warmth and abundance through color temperature and bokeh.',
   stylish:
-    'Ultra-modern cool stylish commercial photography. High-contrast dark or pure-white background. Sharp geometric angular composition. Fashion-forward editorial aesthetic. Contemporary luxury magazine quality.',
+    'High-contrast dark gradient from deep charcoal to pure white or midnight. Dramatic directional studio light with sharp tonal contrast. Fashion-forward editorial minimalism through light and shadow.',
   natural:
-    'Natural organic lifestyle photography. Soft warm natural daylight with gentle bokeh. Earth tones, botanical elements, wooden textures, linen. Clean airy eco-friendly atmosphere.',
+    'Soft warm earthy gradient — warm beige, sage green, natural linen tones. Gentle natural daylight feel with soft bokeh. Organic airy eco-inspired atmosphere through natural color palette.',
 }
 
-// ─── キャンペーン種別プロンプト ───────────────────────────────────────────────
+// ─── キャンペーン種別 → 背景エネルギー（物体なし）────────────────────────────
 const CAMPAIGN_TYPE_PROMPTS: Record<string, string> = {
-  sale:    'High-energy SALE commercial atmosphere. Bold dynamic composition communicating exceptional VALUE and savings. Strong visual urgency with exciting energy.',
-  new:     'Fresh exciting NEW PRODUCT launch energy. Premium reveal atmosphere. Discovery excitement. Clean contemporary modern staging.',
-  season:  'Seasonal celebration atmosphere with carefully chosen natural seasonal elements. Festive mood perfectly aligned with the season.',
-  ranking: 'Award-winning best-seller confidence and prestige. Popular choice authority. Trophy-quality premium achievement atmosphere.',
-  set:     'Abundance and generous value composition. Products arranged to emphasize completeness and great quantity. Compelling set deal presentation.',
-  gift:    'Elegant premium gift-giving atmosphere. Warm sophisticated presentation. Special occasion luxury. Thoughtful and aspirational.',
+  sale:    'High-energy bold warm gradient with strong visual excitement. Dynamic light burst from center. Urgent energetic color atmosphere.',
+  new:     'Fresh clean bright gradient with cool luminous tones. Crisp revealing light suggesting discovery and newness. Contemporary minimalist glow.',
+  season:  'Seasonal mood color palette with soft atmospheric gradients evoking the season through color temperature and light quality only.',
+  ranking: 'Prestigious warm gold and deep tones. Confident premium lighting with golden accent glow suggesting achievement and authority.',
+  set:     'Generous abundant warm gradient with rich full tones. Welcoming wide open color field suggesting completeness and value.',
+  gift:    'Elegant warm sophisticated gradient. Soft premium glow with warm accent light. Special occasion luxury atmosphere through refined color.',
 }
 
-// ─── コピートーンプロンプト ───────────────────────────────────────────────────
+// ─── コピートーン → 背景雰囲気（物体なし）────────────────────────────────────
 const COPY_TONE_PROMPTS: Record<string, string> = {
-  premium:  'Ultra-premium luxury commercial photography. Elegant minimalist background — deep black or pure white. High-end material quality. Aspirational sophisticated restraint.',
-  bargain:  'Bright cheerful inviting accessible atmosphere. Warm approachable colors. Open friendly composition clearly communicating value and accessibility.',
-  urgent:   'Dynamic high-contrast dramatic lighting. Bold composition with tension and immediacy. Strong visual energy suggesting limited-time opportunity.',
-  safe:     'Clean professional trustworthy photography. Stable soft corporate lighting. Reliable calm authoritative atmosphere suggesting quality assurance.',
-  health:   'Fresh organic natural photography. Soft warm natural window light. Clean botanical wellness lifestyle. Vitality and healthy living.',
-  fun:      'Vibrant playful cheerful photography. Bright saturated joyful colors. Dynamic energetic happy composition. Positive celebratory energy.',
+  premium:  'Deep rich dark gradient — near-black or pure white field. Ultra-premium minimalist lighting. Aspirational restrained elegance through tonal depth.',
+  bargain:  'Bright cheerful warm gradient. Inviting accessible color palette with open friendly light. Welcoming approachable atmosphere.',
+  urgent:   'High-contrast dramatic gradient with bold color tension. Sharp directional light. Strong visual urgency through color and shadow.',
+  safe:     'Calm balanced soft gradient. Stable even professional lighting. Trustworthy reliable authoritative atmosphere through clean neutral tones.',
+  health:   'Fresh vibrant clean gradient — natural greens, whites, and organic tones. Soft natural light quality. Vitality and wellness through color.',
+  fun:      'Bright joyful colorful gradient. Saturated playful tones with cheerful bokeh bursts. Celebratory energetic positive atmosphere.',
 }
 
 const DESIGN_STYLE_JA: Record<string, string> = {
@@ -298,24 +298,24 @@ function hexToColorPsychology(hex: string): string {
   return 'ブランドカラーとの統一感を演出'
 }
 
-// ─── カテゴリ別撮影スタイル（英語プロンプト）────────────────────────────────
+// ─── カテゴリ別背景ムード（抽象背景専用 — 商品・物体を描写しない）──────────
 const CATEGORY_STYLE: Record<string, string> = {
   '食品・飲料':
-    'Professional food photography sizzle: visible steam wisps, glistening water droplets, rich saturated colors evoking taste. Macro details showing texture. Soft-box studio lighting with highlights enhancing sheen and freshness. Food must look irresistibly appetizing.',
+    'Warm inviting color palette with golden amber, rich ochre, and deep warm tones. Soft studio lighting suggesting richness and abundance. The atmosphere evokes warmth and natural authenticity through pure color gradients and diffused light alone.',
   '美容・コスメ':
-    'Luxury beauty product photography: clean pearl, frosted glass, or smooth marble background. Soft butterfly lighting with glow effect. Sophisticated and glamorous. Subtle reflections beneath product. Premium spa boutique atmosphere.',
+    'Elegant pearl white, soft rose, and champagne gold gradient tones. Gentle butterfly lighting with a luminous glow. Clean sophisticated atmosphere evoking luxury and refinement through smooth color fields and bokeh.',
   'ファッション':
-    'Editorial fashion photography: crisp clean studio backdrop or curated lifestyle flat-lay. Premium boutique aesthetic. Sharp fabric texture. Fashion magazine quality with precise composition.',
+    'Clean editorial gradient from pure white to soft cool neutral. Fashion magazine minimalism. Crisp even studio light with subtle tonal shift suggesting style and contemporary sophistication.',
   '家電・PC':
-    'Sleek technology product photography: dark reflective surface or pure white background. Sharp geometric product angles. Minimalist modern tech aesthetic. Specular highlights showing premium build quality. Apple/Sony photography style.',
+    'Cool dark gradient from deep charcoal to midnight blue with precise clean lighting. Tech-forward minimalist atmosphere suggesting innovation and premium quality through abstract tones and precise light.',
   'スポーツ・アウトドア':
-    'Dynamic sports lifestyle photography: energetic outdoor or gym environment with natural or dramatic studio lighting. High contrast, bold colors. Motion-inspired composition suggesting energy and performance.',
+    'Dynamic high-contrast gradient with bold energetic colors — deep navy, vibrant accent. Strong directional light suggesting power and motion. Active energetic atmosphere through pure color and dramatic lighting.',
   'インテリア・家具':
-    'Interior lifestyle staging: warm ambient lighting with soft natural shadows. Scandinavian minimalist or Japanese wabi-sabi aesthetic. Natural materials — wood grain, linen, ceramics. Cozy aspirational home setting.',
+    'Warm natural gradient with soft earth tones, warm beige, and honey oak tones. Gentle ambient light suggesting cozy sophisticated living through smooth color gradients and warm bokeh.',
   'ベビー・マタニティ':
-    'Soft and gentle product photography: pastel palette (mint green, blush pink, ivory cream). Diffused soft natural window light. Clean white or neutral background. Safe, nurturing atmosphere. Delicate minimalist styling.',
+    'Soft pastel gradient — gentle blush pink, mint green, and ivory cream. Diffused natural light. Warm protective atmosphere through gentle colors and soft bokeh spheres.',
   'その他':
-    'Clean premium commercial photography: crisp studio lighting, professional product presentation, high contrast between product and background.',
+    'Clean versatile gradient with professional studio tones. Balanced contemporary palette with crisp lighting and smooth color transitions.',
 }
 
 // ─── カテゴリ別設計根拠（日本語 · 根拠レポート用）────────────────────────────
@@ -352,7 +352,12 @@ function textPositionToSpaceDesc(pos: string): string {
 }
 
 
-// ─── プロンプト構築（Imagen 4用 · 20鉄則組み込み）───────────────────────────
+// ─── プロンプト構築（Imagen 4用 — 純粋抽象背景特化）─────────────────────────
+// 重要設計原則:
+//   1. Imagenに「commercial」「banner」「product」を伝えない → 商品の描画を誘発するため
+//   2. 「abstract fine art gradient photography」としてフレームする
+//   3. 商品名・ブランド名は一切Imagenに渡さない（Geminiが変換した色情報のみ使う）
+//   4. 色指定を最前列に置く（Imagenは前半の指示を最も重視する）
 function buildPrompt(input: {
   productName: string
   category: string
@@ -377,39 +382,62 @@ function buildPrompt(input: {
   const categoryStyle = CATEGORY_STYLE[input.category] ?? CATEGORY_STYLE['その他']
   const spaceDesc = textPositionToSpaceDesc(input.textPosition ?? 'bottom-left')
   const stylePrompt = input.designStyle ? DESIGN_STYLE_PROMPTS[input.designStyle] ?? '' : ''
-
-  // 常に背景のみ生成（Imagenに商品を作らせない — 偽商品・文字化けパッケージを根絶）
   const textSide = (input.textPosition ?? 'bottom-left').includes('left') ? 'left' : 'right'
   const productSide = textSide === 'left' ? 'right' : 'left'
+  const productBgColorDesc = input.productBgColor ? hexToColorDescription(input.productBgColor) : 'soft neutral warm light'
 
-  // 商品画像ありの場合：商品側の雰囲気をgradeーションで合成
-  const productBgColorDesc = input.productBgColor ? hexToColorDescription(input.productBgColor) : 'soft neutral light'
-  const gradientInstruction = input.hasProductImage
-    ? `GRADIENT COMPOSITION: Smooth seamless horizontal gradient — the ${textSide} half features ${colorDesc} with soft atmospheric bokeh and warm light glow. The ${productSide} half gently fades to ${productBgColorDesc} to seamlessly blend with the composited product photo. No hard edges, no abrupt transitions, only smooth organic color flow.`
-    : `GRADIENT COMPOSITION: Full-width smooth atmospheric gradient. The dominant tone is ${colorDesc}. Light softly blooms from the ${productSide} side and gently dims toward the ${textSide} side for text legibility. Seamless, no visible bands or hard edges.`
+  // ブランドカラーの優先度:
+  //   1. 商品画像あり → ユーザー選択色 + 商品背景色でグラジエント
+  //   2. Gemini検索でブランドカラーあり → ブランドカラー主体 + ユーザー選択色を補助
+  //   3. 何もなし → ユーザー選択色のみ
+  let gradientSpec: string
+  if (input.hasProductImage) {
+    gradientSpec = `COLOR GRADIENT: Smooth seamless gradient — ${colorDesc} on the ${textSide} side with soft bokeh glow, gently fading to ${productBgColorDesc} on the ${productSide} side. Seamless blend, no hard edges.`
+  } else if (input.productVisualDesc) {
+    gradientSpec = `COLOR GRADIENT: ${input.productVisualDesc} Additionally blend with ${colorDesc} accent on the ${textSide} side for text legibility. Smooth seamless transition, no hard edges.`
+  } else {
+    gradientSpec = `COLOR GRADIENT: ${colorDesc} as the primary dominant tone. Light blooms atmospherically from the ${productSide} side and gently dims toward the ${textSide} side. Seamless smooth gradient.`
+  }
 
-  // 商品ブランドカラーをグラジエント色として直接Imagenに渡す（商品形状は一切含めない）
-  const atmosphereHint = (!input.hasProductImage && input.productVisualDesc)
-    ? `BRAND COLOR THEME FOR BACKGROUND: ${input.productVisualDesc} Apply these exact colors as the atmospheric gradient and lighting palette. This is purely abstract background color — absolutely zero product shapes, zero bottles, zero containers, zero objects of any kind.`
+  const moodStyle = stylePrompt
+    ? `VISUAL MOOD: ${stylePrompt}`
+    : `VISUAL MOOD: ${categoryStyle}`
+
+  const campaignLine = input.campaignType && CAMPAIGN_TYPE_PROMPTS[input.campaignType]
+    ? `ENERGY CHARACTER: ${CAMPAIGN_TYPE_PROMPTS[input.campaignType]}`
+    : ''
+
+  const toneLine = input.copyTone && COPY_TONE_PROMPTS[input.copyTone]
+    ? `ATMOSPHERE: ${COPY_TONE_PROMPTS[input.copyTone]}`
+    : ''
+
+  const catchcopyLine = input.catchcopy?.trim()
+    ? `EMOTIONAL TONE: Inspired by the feeling of "${input.catchcopy}" — let this subtly influence the color temperature and lighting energy.`
+    : ''
+
+  const imageAnalysisLine = input.productImageAnalysis
+    ? `SECONDARY COLOR HARMONY: ${input.productImageAnalysis}`
     : ''
 
   return [
-    `PURE ABSTRACT BACKGROUND ONLY — NO PRODUCTS, NO OBJECTS: Generate a photographic atmospheric background using gradients, bokeh light orbs, and diffused studio lighting. ZERO products. ZERO bottles. ZERO containers. ZERO merchandise. ZERO objects. ZERO packaging. This is a pure color atmosphere background layer — the actual product is composited separately in post-production.`,
-    compositionHint ? compositionHint : '',
-    `TARGET AUDIENCE: "${input.target}".`,
-    stylePrompt ? `VISUAL STYLE: ${stylePrompt}` : `CATEGORY ATMOSPHERE: ${categoryStyle}`,
-    input.campaignType && CAMPAIGN_TYPE_PROMPTS[input.campaignType] ? `CAMPAIGN ENERGY: ${CAMPAIGN_TYPE_PROMPTS[input.campaignType]}` : '',
-    input.copyTone && COPY_TONE_PROMPTS[input.copyTone] ? `TONE: ${COPY_TONE_PROMPTS[input.copyTone]}` : '',
-    input.catchcopy?.trim() ? `MOOD & ATMOSPHERE: The banner's message is "${input.catchcopy}" — let this emotional tone subtly influence the atmospheric color temperature and energy of the background.` : '',
-    atmosphereHint,
-    input.productImageAnalysis ? `COLOR HARMONY: ${input.productImageAnalysis}` : '',
-    input.pageHints ? input.pageHints : '',
-    gradientInstruction,
-    `COLOR THEME: ${colorDesc} is the dominant color. Soft bokeh, atmospheric light, smooth gradients only.`,
-    `NEGATIVE SPACE: Keep the ${spaceDesc} completely clear and visually empty — reserved for text overlay that will be added in post-production. This zone must have zero objects, zero visual elements, zero graphics, zero text — only the gradient background color.`,
-    `VISUAL ELEMENTS ALLOWED: ONLY smooth color gradients, soft out-of-focus bokeh light orbs, diffused studio lighting glow, and subtle lens flare halos. FORBIDDEN: bottles, containers, cosmetic tubes, shoes, food items, any merchandise silhouette, any recognizable object, geometric shapes, patterns, text, typography.`,
-    `TECHNICAL: 8K resolution photographic quality, professional studio lighting, premium contemporary color grade.`,
-    `ABSOLUTE NON-NEGOTIABLE RULES — HIGHEST PRIORITY: (1) ZERO PRODUCTS. ZERO BOTTLES. ZERO CONTAINERS. ZERO OBJECTS. ZERO MERCHANDISE. If any bottle or product silhouette appears anywhere in the image it is automatic failure. (2) ZERO TEXT. ZERO LETTERS. ZERO NUMBERS. ZERO CHARACTERS. Pure abstract color, gradient light, and bokeh only.`,
+    // フレームを「抽象ファインアート」に — 「commercial banner」「product」の文言なし
+    `Abstract fine art gradient photography. Smooth seamless color field with professional studio lighting. Pure atmospheric color background with soft defocused bokeh orbs.`,
+    compositionHint,
+    // 色指定を最前列に（Imagenは冒頭を最重視）
+    gradientSpec,
+    moodStyle,
+    campaignLine,
+    toneLine,
+    catchcopyLine,
+    imageAnalysisLine,
+    input.pageHints || '',
+    // 空白スペースの確保
+    `COMPOSITION DETAIL: The ${spaceDesc} zone must be kept especially clean, open, and free of any visual elements — reserved for text overlay in post-production. Soft empty gradient only in that zone.`,
+    // 許可要素の明示
+    `ALLOWED ELEMENTS: Smooth color gradients. Soft out-of-focus circular bokeh light orbs. Diffused studio lighting glow. Subtle atmospheric light bloom. Nothing else.`,
+    // 禁止事項（簡潔・明確）
+    `STRICTLY FORBIDDEN — AUTOMATIC FAILURE: Any bottle, container, tube, dispenser, shoe, food, clothing, furniture, tool, plant, hand, or any physical object whatsoever. Any text, letter, number, character, logo, brand mark, or symbol. Hard geometric shapes or patterns. The image must contain ONLY abstract color gradients and soft defocused light — nothing identifiable as any real-world object.`,
+    `TECHNICAL: 8K photographic resolution. Smooth color transitions. Contemporary color grade. Professional studio quality.`,
   ].filter(Boolean).join(' ')
 }
 
