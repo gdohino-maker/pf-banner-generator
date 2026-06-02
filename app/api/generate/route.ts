@@ -153,9 +153,9 @@ async function analyzeReferenceImage(ai: GoogleGenAI, imageUrl: string): Promise
   }
 }
 
-// ─── Gemini でウェブ検索して商品のブランドカラーと背景テーマを特定 ──────────
-// 重要: 商品の「外観説明」ではなく「背景に使うべき色・ムード」のみを返す
-// 商品形状・ボトル形状などをImagenに伝えると背景に描画されてしまうため
+// ─── Gemini でウェブ検索して商品のブランドカラーを調べ、Imagen用の色文章を生成 ─
+// 出力はImagenプロンプトに直接埋め込む自然言語の色・ムード記述のみ
+// 絶対に商品形状・物体名を含めない
 async function describeProductVisually(
   ai: GoogleGenAI,
   productName: string | undefined,
@@ -168,31 +168,28 @@ async function describeProductVisually(
 ): Promise<string> {
   const hasSpecificProduct = !!(productName?.trim())
 
-  const prompt = `You are a banner background design specialist for Japanese e-commerce.
+  const prompt = `You are a color specialist for abstract gradient backgrounds. Your output will be inserted directly into an AI image generation prompt.
 
 ${productName ? `Product: "${productName}"` : ''}
 ${productImageDesc ? `Product type: "${productImageDesc}"` : ''}
-Category: ${category || 'General'}
-Target: ${target}
-${productFeatures ? `Features: ${productFeatures}` : ''}
-${saleInfo ? `Promotion: ${saleInfo}` : ''}
-${designStyle ? `Design style: ${designStyle}` : ''}
+${category ? `Category: ${category}` : ''}
+${target ? `Target audience: ${target}` : ''}
+${productFeatures ? `Key features: ${productFeatures}` : ''}
+${saleInfo ? `Promotion context: ${saleInfo}` : ''}
+${designStyle ? `Design style preference: ${designStyle}` : ''}
 
 ${hasSpecificProduct
-  ? `STEP 1 — SEARCH: Search the web for "${productName}" right now. Find its actual brand color palette (e.g., Rohto ReGRO = crimson red + gold + white; Columbia = navy + orange; Sony WH-1000XM5 = platinum silver + black). Use real search results, not assumptions.`
-  : `Use brand knowledge to determine this product type's typical color identity.`
+  ? `Search the web NOW for "${productName}". Find the brand's ACTUAL color identity — e.g., M·A·C = matte black and warm gold; Nike = pure white and black; Rohto ReGRO = crimson red and champagne gold; Columbia = navy and orange; Dyson = silver and purple. Use real search results.`
+  : `Use brand knowledge to determine the ideal color palette for this product type.`
 }
 
-STEP 2 — OUTPUT: Based on the product's ACTUAL brand identity, specify the ideal BACKGROUND for a commercial banner.
+Write ONE sentence describing the color palette and lighting for the background gradient. This sentence will go directly into an image generation prompt.
 
-OUTPUT FORMAT (English only, 2-3 sentences):
-"GRADIENT COLORS: [2-3 specific background gradient colors matching the product's brand palette]. LIGHTING: [atmospheric lighting style]. MOOD: [2-3 mood adjectives matching the brand identity]."
-
-ABSOLUTE RULES:
-- Output ONLY background color/mood specifications — NEVER describe product shape, bottle, container, packaging form
-- Colors must come from the product's REAL brand palette found via search
-- No numbers, weights, measurements in output
-- No Japanese in output`
+Rules:
+- Describe ONLY colors, gradients, and lighting atmosphere — absolutely NO product shapes, bottles, containers, or objects
+- Use vivid specific color adjectives (e.g., "deep matte charcoal black blending into warm champagne gold with subtle rose gold bokeh glow")
+- Match the brand's ACTUAL colors from your search results
+- Output in English only, one sentence, no headers, no bullet points, no explanation`
 
   try {
     const config = hasSpecificProduct ? { tools: [{ googleSearch: {} }] } : undefined
@@ -201,7 +198,9 @@ ABSOLUTE RULES:
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
       config,
     })
-    return result.text?.trim() ?? ''
+    const text = result.text?.trim() ?? ''
+    // 構造化テキスト（"GRADIENT COLORS:"等）が返ってきた場合はクリーンアップ
+    return text.replace(/^(GRADIENT COLORS:|LIGHTING:|MOOD:|BACKGROUND:|COLOR PALETTE:)\s*/i, '').trim()
   } catch {
     try {
       const result = await ai.models.generateContent({
@@ -374,12 +373,12 @@ function textPositionToSpaceDesc(pos: string): string {
 }
 
 
-// ─── プロンプト構築（Imagen 4用 — 純粋抽象背景特化）─────────────────────────
-// 重要設計原則:
-//   1. Imagenに「commercial」「banner」「product」を伝えない → 商品の描画を誘発するため
-//   2. 「abstract fine art gradient photography」としてフレームする
-//   3. 商品名・ブランド名は一切Imagenに渡さない（Geminiが変換した色情報のみ使う）
-//   4. 色指定を最前列に置く（Imagenは前半の指示を最も重視する）
+// ─── プロンプト構築（Imagen 4用 — 短く・色最優先・物体禁止）─────────────────
+// 設計原則:
+//   1. Imagenに商品名・ブランド名・「banner」「commercial」を一切渡さない
+//   2. ブランドカラー（Gemini検索結果）がある場合はユーザー選択色を完全に無視
+//   3. プロンプトを短く保つ（Imagenは先頭300トークンを最重視、長いほど後半が無視される）
+//   4. 色指定を最前列に配置
 function buildPrompt(input: {
   productName: string
   category: string
@@ -400,66 +399,52 @@ function buildPrompt(input: {
   size?: { width: number; height: number }
 }): string {
   const compositionHint = input.size ? getSizeCompositionHint(input.size.width, input.size.height) : ''
-  const colorDesc = hexToColorDescription(input.color)
-  const categoryStyle = CATEGORY_STYLE[input.category] ?? CATEGORY_STYLE['その他']
+  const userColorDesc = hexToColorDescription(input.color)
   const spaceDesc = textPositionToSpaceDesc(input.textPosition ?? 'bottom-left')
-  const stylePrompt = input.designStyle ? DESIGN_STYLE_PROMPTS[input.designStyle] ?? '' : ''
   const textSide = (input.textPosition ?? 'bottom-left').includes('left') ? 'left' : 'right'
   const productSide = textSide === 'left' ? 'right' : 'left'
-  const productBgColorDesc = input.productBgColor ? hexToColorDescription(input.productBgColor) : 'soft neutral warm light'
+  const productBgColorDesc = input.productBgColor ? hexToColorDescription(input.productBgColor) : ''
 
-  // ブランドカラーの優先度:
-  //   1. 商品画像あり → ユーザー選択色 + 商品背景色でグラジエント
-  //   2. Gemini検索でブランドカラーあり → ブランドカラー主体 + ユーザー選択色を補助
-  //   3. 何もなし → ユーザー選択色のみ
-  let gradientSpec: string
-  if (input.hasProductImage) {
-    gradientSpec = `COLOR GRADIENT: Smooth seamless gradient — ${colorDesc} on the ${textSide} side with soft bokeh glow, gently fading to ${productBgColorDesc} on the ${productSide} side. Seamless blend, no hard edges.`
+  // ─── 色指定（優先順位厳守）───────────────────────────────────────────────────
+  // 優先1: 商品画像あり → ユーザー色（テキスト側）＋商品背景色（商品側）
+  // 優先2: Geminiブランドカラーあり → ブランドカラーのみ（ユーザー色は混ぜない）
+  // 優先3: 何もなし → ユーザー選択色
+  let colorSpec: string
+  if (input.hasProductImage && productBgColorDesc) {
+    colorSpec = `smooth gradient from ${userColorDesc} on the ${textSide} side to ${productBgColorDesc} on the ${productSide} side`
   } else if (input.productVisualDesc) {
-    gradientSpec = `COLOR GRADIENT: ${input.productVisualDesc} Additionally blend with ${colorDesc} accent on the ${textSide} side for text legibility. Smooth seamless transition, no hard edges.`
+    colorSpec = input.productVisualDesc
   } else {
-    gradientSpec = `COLOR GRADIENT: ${colorDesc} as the primary dominant tone. Light blooms atmospherically from the ${productSide} side and gently dims toward the ${textSide} side. Seamless smooth gradient.`
+    colorSpec = `${userColorDesc} gradient, lighter toward the ${productSide} side`
   }
 
-  const moodStyle = stylePrompt
-    ? `VISUAL MOOD: ${stylePrompt}`
-    : `VISUAL MOOD: ${categoryStyle}`
+  // ─── スタイル（簡潔に1つだけ）───────────────────────────────────────────────
+  const styleLine = input.designStyle && DESIGN_STYLE_PROMPTS[input.designStyle]
+    ? DESIGN_STYLE_PROMPTS[input.designStyle]
+    : (CATEGORY_STYLE[input.category] ?? CATEGORY_STYLE['その他'])
 
-  const campaignLine = input.campaignType && CAMPAIGN_TYPE_PROMPTS[input.campaignType]
-    ? `ENERGY CHARACTER: ${CAMPAIGN_TYPE_PROMPTS[input.campaignType]}`
-    : ''
+  const extraMood = [
+    input.campaignType ? CAMPAIGN_TYPE_PROMPTS[input.campaignType] : '',
+    input.copyTone ? COPY_TONE_PROMPTS[input.copyTone] : '',
+    input.catchcopy?.trim() ? `Evoke the feeling: "${input.catchcopy}".` : '',
+    input.productImageAnalysis ? `Secondary tones: ${input.productImageAnalysis}` : '',
+  ].filter(Boolean).join(' ')
 
-  const toneLine = input.copyTone && COPY_TONE_PROMPTS[input.copyTone]
-    ? `ATMOSPHERE: ${COPY_TONE_PROMPTS[input.copyTone]}`
-    : ''
-
-  const catchcopyLine = input.catchcopy?.trim()
-    ? `EMOTIONAL TONE: Inspired by the feeling of "${input.catchcopy}" — let this subtly influence the color temperature and lighting energy.`
-    : ''
-
-  const imageAnalysisLine = input.productImageAnalysis
-    ? `SECONDARY COLOR HARMONY: ${input.productImageAnalysis}`
-    : ''
-
+  // ─── 最終プロンプト（短く・明確に）──────────────────────────────────────────
   return [
-    // フレームを「抽象ファインアート」に — 「commercial banner」「product」の文言なし
-    `Abstract fine art gradient photography. Smooth seamless color field with professional studio lighting. Pure atmospheric color background with soft defocused bokeh orbs.`,
+    // フレーミング（商品・バナー・コマーシャルの文脈ゼロ）
+    `Abstract gradient background photograph. Professional studio quality.`,
+    // サイズ別構図ヒント
     compositionHint,
-    // 色指定を最前列に（Imagenは冒頭を最重視）
-    gradientSpec,
-    moodStyle,
-    campaignLine,
-    toneLine,
-    catchcopyLine,
-    imageAnalysisLine,
-    input.pageHints || '',
-    // 空白スペースの確保
-    `COMPOSITION DETAIL: The ${spaceDesc} zone must be kept especially clean, open, and free of any visual elements — reserved for text overlay in post-production. Soft empty gradient only in that zone.`,
-    // 許可要素の明示
-    `ALLOWED ELEMENTS: Smooth color gradients. Soft out-of-focus circular bokeh light orbs. Diffused studio lighting glow. Subtle atmospheric light bloom. Nothing else.`,
-    // 禁止事項（簡潔・明確）
-    `STRICTLY FORBIDDEN — AUTOMATIC FAILURE: Any bottle, container, tube, dispenser, shoe, food, clothing, furniture, tool, plant, hand, or any physical object whatsoever. Any text, letter, number, character, logo, brand mark, or symbol. Hard geometric shapes or patterns. The image must contain ONLY abstract color gradients and soft defocused light — nothing identifiable as any real-world object.`,
-    `TECHNICAL: 8K photographic resolution. Smooth color transitions. Contemporary color grade. Professional studio quality.`,
+    // 色（最重要 — 先頭に配置）
+    `COLORS: ${colorSpec}.`,
+    // 構図
+    `Smooth seamless gradient. Soft defocused bokeh light orbs. Gentle atmospheric studio light bloom from the ${productSide} side. The ${spaceDesc} is kept perfectly clear and open for text.`,
+    // スタイル・ムード
+    styleLine,
+    extraMood,
+    // 禁止（シンプル・具体的）
+    `NO objects. NO products. NO bottles. NO shoes. NO food. NO clothing. NO hands. NO faces. NO text. NO letters. NO numbers. NO logos. Only abstract gradient colors and soft bokeh light. Any identifiable object = automatic failure.`,
   ].filter(Boolean).join(' ')
 }
 
