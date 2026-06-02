@@ -265,20 +265,42 @@ function getSizeCompositionHint(width: number, height: number): string {
 }
 
 // ─── Hex → 自然言語カラー名（英語プロンプト用）────────────────────────────────
+// 重要: 絶対にhex文字列をそのまま返さない（Imagenが文字として描画するため）
 function hexToColorDescription(hex: string): string {
+  if (!hex || hex.length < 7) return 'deep navy blue'
   const r = parseInt(hex.slice(1, 3), 16)
   const g = parseInt(hex.slice(3, 5), 16)
   const b = parseInt(hex.slice(5, 7), 16)
-  if (r > 180 && g < 80  && b < 80)  return 'deep vivid red (Rakuten crimson — #BF0000 range)'
-  if (r < 60  && g < 80  && b > 160) return 'deep navy blue'
-  if (r < 80  && g < 100 && b > 160) return 'rich royal blue'
-  if (r < 80  && g > 140 && b < 100) return 'vibrant forest green'
-  if (r > 200 && g > 160 && b < 80)  return 'warm golden yellow'
-  if (r > 200 && g > 100 && b < 80)  return 'energetic warm orange'
-  if (r > 80  && g < 80  && b > 140) return 'deep regal purple'
-  if (r < 60  && g < 60  && b < 60)  return 'dark charcoal black'
-  if (r > 220 && g > 220 && b > 220) return 'clean bright white'
-  return `the color ${hex}`
+  const rn = r / 255, gn = g / 255, bn = b / 255
+  const max = Math.max(rn, gn, bn), min = Math.min(rn, gn, bn)
+  const l = (max + min) / 2
+  const d = max - min
+  const s = d === 0 ? 0 : l > 0.5 ? d / (2 - max - min) : d / (max + min)
+
+  if (l < 0.08) return 'deep charcoal black'
+  if (l > 0.93) return 'clean bright white'
+  if (s < 0.10) {
+    if (l < 0.30) return 'dark charcoal grey'
+    if (l < 0.65) return 'neutral mid grey'
+    return 'soft silver grey'
+  }
+
+  let h = 0
+  if (d > 0) {
+    if (max === rn) h = ((gn - bn) / d + (gn < bn ? 6 : 0))
+    else if (max === gn) h = (bn - rn) / d + 2
+    else h = (rn - gn) / d + 4
+    h *= 60
+  }
+
+  if (h < 20 || h >= 340) return l < 0.35 ? 'deep dark crimson red' : l < 0.60 ? 'rich vivid red' : 'bright vibrant red'
+  if (h < 45)  return l < 0.40 ? 'deep burnt amber orange' : 'warm energetic orange'
+  if (h < 70)  return l < 0.50 ? 'rich warm gold' : 'bright golden yellow'
+  if (h < 150) return l < 0.30 ? 'deep forest green' : l < 0.55 ? 'vibrant emerald green' : 'fresh bright green'
+  if (h < 195) return l < 0.35 ? 'deep dark teal' : 'fresh teal blue-green'
+  if (h < 250) return l < 0.22 ? 'deep midnight navy blue' : l < 0.40 ? 'rich royal blue' : 'bright clear blue'
+  if (h < 300) return l < 0.30 ? 'deep regal purple' : l < 0.55 ? 'rich violet purple' : 'vibrant purple'
+  return l < 0.50 ? 'deep rose magenta' : 'vibrant rose pink'
 }
 
 // ─── Hex → カラー心理（日本語 · 根拠レポート用）──────────────────────────────
