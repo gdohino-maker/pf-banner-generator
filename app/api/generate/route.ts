@@ -153,7 +153,7 @@ async function analyzeReferenceImage(ai: GoogleGenAI, imageUrl: string): Promise
   }
 }
 
-// ─── Gemini で商品名を英語の視覚的説明に変換（Imagen 4 精度向上）────────────
+// ─── Gemini で商品名をウェブ検索して正確な英語ビジュアル説明に変換 ──────────
 async function describeProductVisually(
   ai: GoogleGenAI,
   productName: string | undefined,
@@ -164,44 +164,56 @@ async function describeProductVisually(
   saleInfo?: string,
   designStyle?: string,
 ): Promise<string> {
-  try {
-    const result = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: [{
-        role: 'user',
-        parts: [{
-          text: `You are a commercial photographer's art director with deep knowledge of Japanese and global consumer brands. Convert this Japanese product into a precise English visual description for Imagen 4.
+  const hasSpecificProduct = !!(productName?.trim())
+  const prompt = `You are a commercial photographer's art director. Your job is to produce a precise English visual description of a product for Imagen 4 AI image generation.
 
 ${productName ? `Product name/brand/model: "${productName}"` : ''}
-${productImageDesc ? `Product image/category description: "${productImageDesc}"` : ''}
+${productImageDesc ? `Product category/image description: "${productImageDesc}"` : ''}
 Category: ${category || 'General'}
 Target customer: ${target}
 ${productFeatures ? `Key features: ${productFeatures}` : ''}
 ${saleInfo ? `Promotion context: ${saleInfo}` : ''}
 ${designStyle ? `Desired design style: ${designStyle}` : ''}
 
-CRITICAL — BRAND KNOWLEDGE: If the product name references a KNOWN BRAND or product line (examples: Columbia outdoor shoes = navy blue/orange/grey rugged trail aesthetics; Dyson = sleek silver-purple technology; Asahi beer = golden crisp refreshing; Meiji chocolate = warm brown indulgent; Nike = bold dynamic athletic; Sony = precision minimalist dark premium; Nikon = professional photography dark matte), USE YOUR ACTUAL KNOWLEDGE of:
-- The brand's specific signature colors
-- The product's actual physical appearance and materials
-- The brand's distinctive photography and advertising aesthetic
-- The typical lifestyle context they use in commercial photography
+${hasSpecificProduct
+    ? `CRITICAL INSTRUCTION: Search the web NOW for "${productName}" to find its ACTUAL, REAL appearance. You must describe the product's TRUE physical look based on search results — actual packaging colors, container shape, brand color scheme, materials. Do NOT guess or use generic assumptions. If the product is "リグロEX5エナジー 60ml" you must find and describe the real white/red/gold packaging. If it is "Columbia YH4977" you must find that specific shoe's real colors. Always verify with search.`
+    : `Use your knowledge of Japanese and global consumer brands to describe the product's likely appearance accurately.`
+}
 
-STRICT RULES:
+STRICT OUTPUT RULES:
 1. Write 3-4 sentences of precise English ONLY
-2. Describe the product's ACTUAL PHYSICAL APPEARANCE with specific brand details (real colors, materials, signature design elements)
-3. Describe the IDEAL PHOTOGRAPHIC SCENE in the brand's established aesthetic
-4. NEVER include numbers, weights (g, kg, ml), prices, quantities, measurements
-5. NEVER include text or letters that would appear on packaging/labels
-6. Use precise color names: "Columbia's signature arctic white and graphite grey mesh upper with orange heel accents" not just "white shoe"
-7. Professional commercial photography language
+2. Describe the product's ACTUAL PHYSICAL APPEARANCE: exact colors, container/packaging shape, materials, brand color scheme
+3. Describe the IDEAL PHOTOGRAPHIC SCENE and background atmosphere that would best showcase this product
+4. NEVER include numbers, weights (g, kg, ml), prices, quantities, or measurements
+5. NEVER include text, logos, letters, or words that would appear on packaging
+6. Be precise: "white matte bottle with crimson red cap and gold accent band" not just "cosmetic bottle"
+7. Professional commercial photography language only
 
-Output ONLY the English visual description, no explanations, no Japanese.`,
-        }]
-      }]
+Output ONLY the English visual description, no explanations, no Japanese, no commentary.`
+
+  try {
+    // 具体的な商品名がある場合はGoogle Searchで実際の商品情報を検索
+    const config = hasSpecificProduct
+      ? { tools: [{ googleSearch: {} }] }
+      : undefined
+
+    const result = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      config,
     })
     return result.text?.trim() ?? ''
   } catch {
-    return ''
+    // Search grounding失敗時はフォールバック（検索なし）
+    try {
+      const result = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      })
+      return result.text?.trim() ?? ''
+    } catch {
+      return ''
+    }
   }
 }
 
@@ -341,29 +353,6 @@ function textPositionToSpaceDesc(pos: string): string {
   return map[pos] ?? 'lower-left or left side of the frame'
 }
 
-// ─── 楽天EC バナー制作 20の鉄則 ──────────────────────────────────────────────
-const RAKUTEN_BANNER_RULES = [
-  'Main product clearly visible and dominant in the frame',
-  'Rule-of-thirds composition with product slightly off-center for dynamic tension',
-  'Reserve a large clean negative space zone in the designated area for text overlay',
-  'Strong single focal point with no visual ambiguity about the product',
-  'High visual contrast between product and background (minimum 4.5:1)',
-  'Accent color used as intentional design element throughout composition',
-  'Background must be simple: solid color smooth gradient or soft bokeh only',
-  'No busy complex background patterns competing with the product',
-  'Studio-quality lighting with soft shadows creating depth and dimension',
-  'Specular highlights on product surface suggesting premium material quality',
-  'Sharp product focus with naturally blurred background when applicable',
-  'Photorealistic 8K resolution quality — not illustration or 3D render style',
-  'Product readable and recognizable at 200x200px thumbnail size for mobile',
-  'Mobile-first composition with key visual elements visible on narrow screens',
-  'Contemporary color grading — not retro vintage or heavily filtered',
-  'Professional trustworthy appearance matching Rakuten Ichiba standards',
-  'Visual tone and color temperature tuned to the target demographic',
-  'Emotional resonance with target audience primary desire or aspiration',
-  'ABSOLUTE RULE: ZERO text ZERO letters ZERO numbers ZERO Japanese characters ZERO logos ZERO watermarks ZERO labels ZERO signs anywhere in the image — only photographic visual content is allowed',
-  'ABSOLUTE RULE: ZERO promotional badges ZERO sale stickers ZERO price tags ZERO AI-generated overlay graphics ZERO typography of any kind',
-]
 
 // ─── プロンプト構築（Imagen 4用 · 20鉄則組み込み）───────────────────────────
 function buildPrompt(input: {
