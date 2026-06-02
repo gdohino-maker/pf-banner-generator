@@ -153,7 +153,9 @@ async function analyzeReferenceImage(ai: GoogleGenAI, imageUrl: string): Promise
   }
 }
 
-// ─── Gemini で商品名をウェブ検索して正確な英語ビジュアル説明に変換 ──────────
+// ─── Gemini でウェブ検索して商品のブランドカラーと背景テーマを特定 ──────────
+// 重要: 商品の「外観説明」ではなく「背景に使うべき色・ムード」のみを返す
+// 商品形状・ボトル形状などをImagenに伝えると背景に描画されてしまうため
 async function describeProductVisually(
   ai: GoogleGenAI,
   productName: string | undefined,
@@ -165,38 +167,35 @@ async function describeProductVisually(
   designStyle?: string,
 ): Promise<string> {
   const hasSpecificProduct = !!(productName?.trim())
-  const prompt = `You are a commercial photographer's art director. Your job is to produce a precise English visual description of a product for Imagen 4 AI image generation.
 
-${productName ? `Product name/brand/model: "${productName}"` : ''}
-${productImageDesc ? `Product category/image description: "${productImageDesc}"` : ''}
+  const prompt = `You are a banner background design specialist for Japanese e-commerce.
+
+${productName ? `Product: "${productName}"` : ''}
+${productImageDesc ? `Product type: "${productImageDesc}"` : ''}
 Category: ${category || 'General'}
-Target customer: ${target}
-${productFeatures ? `Key features: ${productFeatures}` : ''}
-${saleInfo ? `Promotion context: ${saleInfo}` : ''}
-${designStyle ? `Desired design style: ${designStyle}` : ''}
+Target: ${target}
+${productFeatures ? `Features: ${productFeatures}` : ''}
+${saleInfo ? `Promotion: ${saleInfo}` : ''}
+${designStyle ? `Design style: ${designStyle}` : ''}
 
 ${hasSpecificProduct
-    ? `CRITICAL INSTRUCTION: Search the web NOW for "${productName}" to find its ACTUAL, REAL appearance. You must describe the product's TRUE physical look based on search results — actual packaging colors, container shape, brand color scheme, materials. Do NOT guess or use generic assumptions. If the product is "リグロEX5エナジー 60ml" you must find and describe the real white/red/gold packaging. If it is "Columbia YH4977" you must find that specific shoe's real colors. Always verify with search.`
-    : `Use your knowledge of Japanese and global consumer brands to describe the product's likely appearance accurately.`
+  ? `STEP 1 — SEARCH: Search the web for "${productName}" right now. Find its actual brand color palette (e.g., Rohto ReGRO = crimson red + gold + white; Columbia = navy + orange; Sony WH-1000XM5 = platinum silver + black). Use real search results, not assumptions.`
+  : `Use brand knowledge to determine this product type's typical color identity.`
 }
 
-STRICT OUTPUT RULES:
-1. Write 3-4 sentences of precise English ONLY
-2. Describe the product's ACTUAL PHYSICAL APPEARANCE: exact colors, container/packaging shape, materials, brand color scheme
-3. Describe the IDEAL PHOTOGRAPHIC SCENE and background atmosphere that would best showcase this product
-4. NEVER include numbers, weights (g, kg, ml), prices, quantities, or measurements
-5. NEVER include text, logos, letters, or words that would appear on packaging
-6. Be precise: "white matte bottle with crimson red cap and gold accent band" not just "cosmetic bottle"
-7. Professional commercial photography language only
+STEP 2 — OUTPUT: Based on the product's ACTUAL brand identity, specify the ideal BACKGROUND for a commercial banner.
 
-Output ONLY the English visual description, no explanations, no Japanese, no commentary.`
+OUTPUT FORMAT (English only, 2-3 sentences):
+"GRADIENT COLORS: [2-3 specific background gradient colors matching the product's brand palette]. LIGHTING: [atmospheric lighting style]. MOOD: [2-3 mood adjectives matching the brand identity]."
+
+ABSOLUTE RULES:
+- Output ONLY background color/mood specifications — NEVER describe product shape, bottle, container, packaging form
+- Colors must come from the product's REAL brand palette found via search
+- No numbers, weights, measurements in output
+- No Japanese in output`
 
   try {
-    // 具体的な商品名がある場合はGoogle Searchで実際の商品情報を検索
-    const config = hasSpecificProduct
-      ? { tools: [{ googleSearch: {} }] }
-      : undefined
-
+    const config = hasSpecificProduct ? { tools: [{ googleSearch: {} }] } : undefined
     const result = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
@@ -204,7 +203,6 @@ Output ONLY the English visual description, no explanations, no Japanese, no com
     })
     return result.text?.trim() ?? ''
   } catch {
-    // Search grounding失敗時はフォールバック（検索なし）
     try {
       const result = await ai.models.generateContent({
         model: 'gemini-2.5-flash',
@@ -390,13 +388,13 @@ function buildPrompt(input: {
     ? `GRADIENT COMPOSITION: Smooth seamless horizontal gradient — the ${textSide} half features ${colorDesc} with soft atmospheric bokeh and warm light glow. The ${productSide} half gently fades to ${productBgColorDesc} to seamlessly blend with the composited product photo. No hard edges, no abrupt transitions, only smooth organic color flow.`
     : `GRADIENT COMPOSITION: Full-width smooth atmospheric gradient. The dominant tone is ${colorDesc}. Light softly blooms from the ${productSide} side and gently dims toward the ${textSide} side for text legibility. Seamless, no visible bands or hard edges.`
 
-  // 商品画像なしでビジュアル説明あり：雰囲気としてビジュアルを取り込む
+  // 商品ブランドカラーをグラジエント色として直接Imagenに渡す（商品形状は一切含めない）
   const atmosphereHint = (!input.hasProductImage && input.productVisualDesc)
-    ? `ATMOSPHERE REFERENCE: The banner promotes "${input.productVisualDesc}". Reflect this product's visual character (colors, mood, textures) purely through abstract light, color, and bokeh — no objects, no products.`
+    ? `BRAND COLOR THEME FOR BACKGROUND: ${input.productVisualDesc} Apply these exact colors as the atmospheric gradient and lighting palette. This is purely abstract background color — absolutely zero product shapes, zero bottles, zero containers, zero objects of any kind.`
     : ''
 
   return [
-    `COMMERCIAL BANNER BACKGROUND ONLY: Generate a pure atmospheric background for a "${input.productName}" banner. This is a background layer — the product photo is composited in post-production. GENERATE ZERO PRODUCTS, ZERO OBJECTS, ZERO MERCHANDISE, ZERO PACKAGING, ZERO BOTTLES, ZERO BAGS, ZERO CUPS — background environment only.`,
+    `PURE ABSTRACT BACKGROUND ONLY — NO PRODUCTS, NO OBJECTS: Generate a photographic atmospheric background using gradients, bokeh light orbs, and diffused studio lighting. ZERO products. ZERO bottles. ZERO containers. ZERO merchandise. ZERO objects. ZERO packaging. This is a pure color atmosphere background layer — the actual product is composited separately in post-production.`,
     compositionHint ? compositionHint : '',
     `TARGET AUDIENCE: "${input.target}".`,
     stylePrompt ? `VISUAL STYLE: ${stylePrompt}` : `CATEGORY ATMOSPHERE: ${categoryStyle}`,
@@ -409,9 +407,9 @@ function buildPrompt(input: {
     gradientInstruction,
     `COLOR THEME: ${colorDesc} is the dominant color. Soft bokeh, atmospheric light, smooth gradients only.`,
     `NEGATIVE SPACE: Keep the ${spaceDesc} completely clear and visually empty — reserved for text overlay that will be added in post-production. This zone must have zero objects, zero visual elements, zero graphics, zero text — only the gradient background color.`,
-    `VISUAL ELEMENTS: ONLY smooth gradients, soft circular bokeh orbs, and gentle light diffusion. Absolutely NO geometric shapes, NO diamonds, NO polygons, NO hexagons, NO triangles, NO lines, NO patterns, NO abstract shapes, NO objects of any kind.`,
-    `TECHNICAL: 8K resolution, professional studio quality, premium contemporary color grade.`,
-    `ABSOLUTE CRITICAL — HIGHEST PRIORITY: ZERO TEXT. ZERO TYPOGRAPHY. ZERO CHARACTERS. ZERO NUMBERS. ZERO LETTERS. ZERO JAPANESE. ZERO CHINESE. ZERO KOREAN. ZERO WORDS. ZERO LOGOS. ZERO LABELS. ZERO PRODUCTS. ZERO OBJECTS. Pure color, light, gradient, bokeh only. Any character, product, or object anywhere is automatic failure.`,
+    `VISUAL ELEMENTS ALLOWED: ONLY smooth color gradients, soft out-of-focus bokeh light orbs, diffused studio lighting glow, and subtle lens flare halos. FORBIDDEN: bottles, containers, cosmetic tubes, shoes, food items, any merchandise silhouette, any recognizable object, geometric shapes, patterns, text, typography.`,
+    `TECHNICAL: 8K resolution photographic quality, professional studio lighting, premium contemporary color grade.`,
+    `ABSOLUTE NON-NEGOTIABLE RULES — HIGHEST PRIORITY: (1) ZERO PRODUCTS. ZERO BOTTLES. ZERO CONTAINERS. ZERO OBJECTS. ZERO MERCHANDISE. If any bottle or product silhouette appears anywhere in the image it is automatic failure. (2) ZERO TEXT. ZERO LETTERS. ZERO NUMBERS. ZERO CHARACTERS. Pure abstract color, gradient light, and bokeh only.`,
   ].filter(Boolean).join(' ')
 }
 
