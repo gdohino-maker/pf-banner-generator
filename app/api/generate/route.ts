@@ -138,10 +138,10 @@ const SCENE_DICT: { pattern: RegExp; ctx: SceneContext }[] = [
   {
     pattern: /スキンケア|化粧品|コスメ|美容液|乳液|クリーム|洗顔|化粧水|セラム|ファンデ|リップ|アイシャドウ|マスカラ|香水/,
     ctx: {
-      environment: 'smooth frosted pearl-white luxury beauty editorial surface, high-end department store aesthetic',
-      lighting: 'soft perfect butterfly lighting, luminous even illumination, subtle specular highlights on surfaces',
-      props: 'draped pearl white silk satin fabric, crystal water droplets on surface, smooth white pebbles, jasmine flowers in bokeh',
-      podium: 'white acrylic transparent cylindrical podium, silk satin drape behind, crystal droplets, delicate floral accent',
+      environment: 'smooth pearl-white luxury beauty editorial surface with subtle spatial depth, high-end boutique counter aesthetic',
+      lighting: 'soft perfect butterfly lighting with gentle luminous background glow, luminous even illumination, beautiful soft bokeh glow in background',
+      props: 'beautiful soft bokeh light orbs in distant background, draped pearl white silk satin, crystal water droplets, delicate jasmine flowers in deep background blur',
+      podium: 'white acrylic cylindrical podium with silk satin drape behind, crystal droplets, soft background bokeh depth',
     },
   },
   {
@@ -174,10 +174,10 @@ const SCENE_DICT: { pattern: RegExp; ctx: SceneContext }[] = [
   {
     pattern: /服|アパレル|ファッション|コート|ジャケット|シャツ|パンツ|スカート|ニット|ワンピース|トップス|ボトムス/,
     ctx: {
-      environment: 'industrial concrete studio backdrop, modern minimalist fashion editorial space',
-      lighting: 'high-key diffused studio lighting, clean directional shadows, fashion magazine quality',
-      props: 'minimal garment rack silhouette in background bokeh, concrete pillar accent, fashion editorial texture',
-      podium: 'concrete plinth surface, industrial metal rack element, clean matte fashion backdrop',
+      environment: 'premium minimalist fashion studio with subtle architectural spatial depth, elegant light-grey textured wall, natural depth and dimension',
+      lighting: 'soft natural window light casting elegant subtle architectural shadows on wall, cinematic depth of field, minimalist high-end studio staging',
+      props: 'beautiful blurred distant background bokeh with soft light orbs, subtle clothing rack silhouette far in deep background, architectural shadow play',
+      podium: 'clean concrete plinth with subtle matte depth, industrial metal element, soft shadow casting on floor',
     },
   },
   {
@@ -237,16 +237,16 @@ const CATEGORY_SCENE_FALLBACK: Record<string, SceneContext> = {
     sizzle: 'appetizing food presentation, steam rising, sauce sheen and gloss',
   },
   '美容・コスメ': {
-    environment: 'smooth luxury beauty editorial surface, minimalist department store counter',
-    lighting: 'soft butterfly lighting, luminous even illumination, specular highlights',
-    props: 'silk fabric, floral elements, crystal accents, water droplets',
-    podium: 'white acrylic cylindrical pedestal, silk drape, flower petal accent',
+    environment: 'smooth pearl-white luxury beauty editorial surface with subtle spatial depth, high-end boutique aesthetic',
+    lighting: 'soft butterfly lighting with beautiful background glow, luminous even illumination, soft bokeh depth in background',
+    props: 'beautiful bokeh light orbs in background, silk fabric, crystal accents, water droplets, floral elements in distant blur',
+    podium: 'white acrylic pedestal with silk drape, soft background depth, flower accent',
   },
   'ファッション': {
-    environment: 'high-fashion editorial studio, clean minimal concrete backdrop',
-    lighting: 'high-key studio lighting, clean directional shadows, fashion quality',
-    props: 'minimal garment rack bokeh, concrete texture, editorial aesthetic',
-    podium: 'clean studio plinth, minimal industrial aesthetic, fashion white',
+    environment: 'premium minimalist fashion studio with subtle architectural depth, elegant textured wall',
+    lighting: 'soft natural window light with elegant shadows, cinematic depth of field, minimalist staging',
+    props: 'beautiful bokeh depth in background, subtle rack silhouette in distance, architectural shadow play',
+    podium: 'clean concrete plinth, subtle shadow casting on floor, minimal depth',
   },
   '家電・PC': {
     environment: 'dark precision tech studio surface, Apple-level product photography',
@@ -417,6 +417,19 @@ async function generateImagenPrompt(
 ): Promise<string> {
   const subjectSide = input.textSide === 'left' ? 'right' : 'left'
 
+  // ─── バリエーション強化: スタイルモディファイアをランダム付与 ──────────────
+  const STYLE_MODIFIERS = [
+    'minimalist and refined, clean elegance',
+    'elegant and luxurious, ultra-premium feel',
+    'dynamic and bold with dramatic high-contrast',
+    'soft and atmospheric with gentle cinematic depth',
+    'dramatic and moody with rich deep shadows',
+    'bright and airy with fresh luminous appeal',
+    'sophisticated and editorial, fashion-forward',
+    'warm and inviting with rich golden tones',
+  ]
+  const styleModifier = STYLE_MODIFIERS[Math.floor(Math.random() * STYLE_MODIFIERS.length)]
+
   // ─── 構図制約 ───────────────────────────────────────────────────────────────
   const cropWarning = input.isUltraWide
     ? `CRITICAL CROP: This 16:9 image will be severely cropped to an ultra-wide panoramic banner (~8:1 ratio). ONLY the central 30% height band will be visible. ALL elements MUST be within the center horizontal strip.`
@@ -424,8 +437,8 @@ async function generateImagenPrompt(
       ? `WIDE CROP: Image cropped to wide horizontal banner. All elements must stay within center 50% height zone.`
       : `STANDARD: Balanced composition.`
 
-  // Mode B: テキスト側の絶対空白を強制する非対称構図
-  const asymmetricRule = `ASYMMETRIC GOLDEN RATIO (MANDATORY): The ENTIRE ${input.textSide} half of the image MUST be completely empty, smooth out-of-focus negative space — zero visual subjects allowed in that zone. The main subject must be placed ENTIRELY on the ${subjectSide} side, occupying only the ${subjectSide} third of the frame. Extreme asymmetry required.`
+  // Mode B: テキスト側の絶対空白を強制する非対称構図（"typography"/"text"を含めない）
+  const asymmetricRule = `ASYMMETRIC GOLDEN RATIO (MANDATORY): The ENTIRE ${input.textSide} half of the image MUST be a vast, clean, and elegant negative space — completely minimal, smooth, unobstructed, out-of-focus. Zero visual subjects in that zone. The main subject must be placed ENTIRELY on the ${subjectSide} side, occupying only the ${subjectSide} third. Extreme asymmetry required.`
 
   // Mode C: シーンのenvironmentからフラットレイ用の素材を導出
   const flatlaySurface = (() => {
@@ -444,10 +457,10 @@ async function generateImagenPrompt(
   })()
 
   // 全モード共通: 品質タグ（末尾に付与）
-  const qualityTags = `Commercial product photography, 8K resolution, cinematic studio lighting, highly detailed texture, shot on 85mm lens, professional color grading.`
+  const qualityTags = `Commercial product photography, 8K resolution, cinematic studio lighting, highly detailed texture, shot on 85mm lens, professional color grading. Overall style: ${styleModifier}.`
 
-  // 全モード共通: ネガティブ指示
-  const negativeRule = `ABSOLUTE EXCLUSIONS — never include: no text, no words, no letters, no numbers, no logos, no watermarks, no typography, no UI elements, no signs, no labels, no overlay elements.`
+  // 全モード共通: ネガティブ指示（hallucination対策 — "typography"等のポジ的言及を除外）
+  const negativeRule = `FORBIDDEN — must never appear: letters, characters, words, writing, scripts, fonts, logos, watermarks, UI elements, signs, labels, numbers, symbols, brand marks.`
 
   const geminiInstruction = input.isHeroShot
     ? `You are a master commercial photographer writing Imagen 4 image generation prompts for premium Japanese e-commerce banners (Rakuten SHOP OF THE YEAR quality).
@@ -494,8 +507,8 @@ BACKGROUND TO CREATE:
 
 COMPOSITION (MANDATORY):
 - ${cropWarning}
-- TEXT ZONE: The ${input.textSide} side (40% of width) completely clear for text overlay
-- SURFACE: Flat textured surface fills the ${subjectSide} area, smoothly blurred background
+- OPEN ZONE: The ${input.textSide} side (40% of width) must be a vast, clean, elegant negative space — completely minimal and unobstructed
+- SURFACE: Flat textured surface on the ${subjectSide} area, smoothly blurred background
 - Beautiful cinematic bokeh, f/1.4 equivalent depth of field
 
 QUALITY: ${qualityTags}
@@ -516,12 +529,12 @@ OUTPUT RULES: Write ONLY the Imagen 4 prompt. No explanation. Maximum 200 words.
     console.warn('[generateImagenPrompt] Gemini call failed, using scene fallback:', e)
   }
 
-  // Gemini失敗時フォールバック
-  const qualitySuffix = `Commercial product photography, 8K, cinematic studio lighting, 85mm lens. No text, no logos, no watermarks.`
+  // Gemini失敗時フォールバック（"text"/"typography"を含めない）
+  const qualitySuffix = `Commercial product photography, 8K, cinematic studio lighting, 85mm lens, ${styleModifier}. No letters, no logos, no watermarks, no symbols.`
   if (input.isHeroShot) {
-    return `Hero product shot of ${input.productDesc}. ${input.scene.environment}. ${input.scene.lighting}. Props in bokeh: ${input.scene.props}. ${input.colorDesc} palette. ${input.textSide} side completely empty for text (extreme asymmetry). f/1.8 bokeh. ${input.scene.sizzle ?? ''} ${qualitySuffix}`
+    return `Hero product shot of ${input.productDesc}. ${input.scene.environment}. ${input.scene.lighting}. Props in bokeh: ${input.scene.props}. ${input.colorDesc} palette. ${input.textSide} half: vast clean elegant negative space, completely empty. ${input.scene.sizzle ?? ''} f/1.8 shallow bokeh. ${qualitySuffix}`
   }
-  return `Top-down flatlay background. ${flatlaySurface}. ${input.scene.lighting}. Out-of-focus props: ${input.scene.props}. ${input.colorDesc} palette. NO 3D objects in foreground, flat surface only, perfect for product compositing. ${input.textSide} side clear for text. f/1.4 cinematic bokeh. ${qualitySuffix}`
+  return `Top-down flatlay background. ${flatlaySurface}. ${input.scene.lighting}. Out-of-focus atmosphere: ${input.scene.props}. ${input.colorDesc} palette. NO 3D objects in foreground, flat surface only. ${input.textSide} side: vast clean minimal open area. f/1.4 cinematic bokeh. ${qualitySuffix}`
 }
 
 // ─── AI診断レポート生成（診断カード用）──────────────────────────────────────

@@ -297,7 +297,19 @@ async function renderToCanvas(
       else if (productImagePos === 'left') ctx.fillRect(0, 0, Math.round(cw * 0.5), ch)
       else ctx.fillRect(Math.round(cw * 0.25), 0, Math.round(cw * 0.5), ch)
     }
+    // 切り抜き済み商品画像にドロップシャドウを付与してシール感を解消
+    if (productImageCutoutUrl) {
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.18)'
+      ctx.shadowBlur = Math.round(cw * 0.018)   // バナー幅に対して相対値
+      ctx.shadowOffsetX = Math.round(cw * 0.004)
+      ctx.shadowOffsetY = Math.round(cw * 0.012)
+    }
     ctx.drawImage(prodImg, Math.round(px2), Math.round(py2), pw, ph)
+    // シャドウをリセット（テキスト等に影響させない）
+    ctx.shadowColor = 'transparent'
+    ctx.shadowBlur = 0
+    ctx.shadowOffsetX = 0
+    ctx.shadowOffsetY = 0
   }
 
   if (text.trim()) {
