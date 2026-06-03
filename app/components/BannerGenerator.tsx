@@ -278,6 +278,11 @@ async function renderToCanvas(
   productImagePos: 'left' | 'center' | 'right' = 'right',
   productBgColor = '#f5f5f5',
   productImageCutoutUrl: string | null = null,
+  productOffsetX = 0,
+  productOffsetY = 0,
+  productScale = 1.0,
+  textBand = false,
+  textShadowMode: 'none' | 'standard' | 'strong' = 'standard',
 ): Promise<HTMLCanvasElement> {
   const { width: cw, height: ch } = img.size
   const canvas = document.createElement('canvas')
@@ -297,29 +302,30 @@ async function renderToCanvas(
   const effectiveProductUrl = productImageCutoutUrl ?? productImageDataUrl
   if (effectiveProductUrl) {
     const prodImg = await loadImage(effectiveProductUrl)
-    const maxH = ch * 0.92
-    const maxW = cw * 0.48
+    const maxH = ch * 0.92 * productScale
+    const maxW = cw * 0.48 * productScale
     const scale = Math.min(maxW / prodImg.naturalWidth, maxH / prodImg.naturalHeight, 1.0)
     const pw = Math.round(prodImg.naturalWidth * scale)
     const ph = Math.round(prodImg.naturalHeight * scale)
-    let px2 = 0
-    if (productImagePos === 'right') px2 = cw - pw - Math.round(cw * 0.01)
-    else if (productImagePos === 'center') px2 = Math.round((cw - pw) / 2)
-    else px2 = Math.round(cw * 0.01)
-    const py2 = Math.round((ch - ph) / 2)
+    // ベース位置（productImagePos）+ オフセット
+    const baseX = productImagePos === 'right' ? cw - pw / 2 - Math.round(cw * 0.01)
+                : productImagePos === 'left'  ? pw / 2 + Math.round(cw * 0.01)
+                : cw / 2
+    const finalCx = Math.round(baseX + productOffsetX * cw)
+    const finalCy = Math.round(ch / 2 + productOffsetY * ch)
+    const px2 = finalCx - pw / 2
+    const py2 = finalCy - ph / 2
     if (!productImageCutoutUrl) {
-      // 背景除去なし：背景色ゾーンを塗りつぶしてシームレス合成
       ctx.fillStyle = productBgColor
-      if (productImagePos === 'right') ctx.fillRect(px2, 0, cw - px2, ch)
-      else if (productImagePos === 'left') ctx.fillRect(0, 0, px2 + pw, ch)
-      else ctx.fillRect(px2, 0, pw, ch)
+      if (productImagePos === 'right') ctx.fillRect(Math.round(cw * 0.5), 0, cw, ch)
+      else if (productImagePos === 'left') ctx.fillRect(0, 0, Math.round(cw * 0.5), ch)
+      else ctx.fillRect(Math.round(cw * 0.25), 0, Math.round(cw * 0.5), ch)
     }
-    ctx.drawImage(prodImg, px2, py2, pw, ph)
+    ctx.drawImage(prodImg, Math.round(px2), Math.round(py2), pw, ph)
   }
 
   if (text.trim()) {
     const fontStyle = FONT_STYLES.find(f => f.id === fontStyleId)!
-    // cw基準で計算 → CSSのcqw単位と完全一致
     const cqwPct = (TEXT_SIZES.find(s => s.id === overlay.textSizeId)?.cqwPct ?? 3.0) / 100
     const fontSize = Math.round(Math.max(8, cw * cqwPct))
     const lineHeight = fontSize * 1.35
@@ -346,23 +352,35 @@ async function renderToCanvas(
       ? ch - padding - blockH + lineHeight * 0.82
       : padding + lineHeight * 0.88
 
+    // 座布団（背景帯）
+    if (textBand) {
+      const bandPad = Math.round(padding * 0.5)
+      const bandY = overlay.vAlign === 'bottom'
+        ? ch - padding - blockH - bandPad
+        : padding - bandPad
+      ctx.fillStyle = overlay.textColor === 'white' ? 'rgba(0,0,0,0.62)' : 'rgba(255,255,255,0.88)'
+      ctx.fillRect(0, bandY, cw, blockH + bandPad * 2)
+    }
+
     const strokeColor = overlay.textColor === 'white' ? 'rgba(0,0,0,0.88)' : 'rgba(255,255,255,0.88)'
     const fillColor   = overlay.textColor === 'white' ? '#ffffff' : '#111111'
 
     lines.forEach((line, i) => {
       const ly = y + i * lineHeight
       ctx.shadowColor = 'transparent'
-      ctx.lineWidth = Math.max(2, fontSize * 0.10)
-      ctx.lineJoin = 'round'
-      ctx.strokeStyle = strokeColor
-      ctx.strokeText(line, x, ly, maxTextWidth)
-      ctx.shadowColor = strokeColor
-      ctx.shadowBlur = fontSize * 0.22
-      ctx.shadowOffsetX = 0
-      ctx.shadowOffsetY = Math.round(fontSize * 0.06)
+      if (textShadowMode !== 'none') {
+        ctx.lineWidth = textShadowMode === 'strong' ? Math.max(4, fontSize * 0.16) : Math.max(2, fontSize * 0.10)
+        ctx.lineJoin = 'round'
+        ctx.strokeStyle = strokeColor
+        ctx.strokeText(line, x, ly, maxTextWidth)
+        ctx.shadowColor = strokeColor
+        ctx.shadowBlur = textShadowMode === 'strong' ? fontSize * 0.5 : fontSize * 0.22
+        ctx.shadowOffsetX = textShadowMode === 'strong' ? 2 : 0
+        ctx.shadowOffsetY = textShadowMode === 'strong' ? 4 : Math.round(fontSize * 0.06)
+      }
       ctx.fillStyle = fillColor
       ctx.fillText(line, x, ly, maxTextWidth)
-      ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; ctx.shadowOffsetY = 0
+      ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0
     })
   }
 
@@ -469,10 +487,21 @@ export default function BannerGenerator() {
   const [isRemovingBg, setIsRemovingBg] = useState(false)
   const [bgRemovalPct, setBgRemovalPct] = useState(0)
   const [bgRemovalError, setBgRemovalError] = useState(false)
+  // 商品画像の位置・スケール（ドラッグで操作）
+  const [productOffsetX, setProductOffsetX] = useState(0)   // バナー幅の割合（-0.45〜0.45）
+  const [productOffsetY, setProductOffsetY] = useState(0)   // バナー高さの割合
+  const [productScale, setProductScale] = useState(1.0)     // スケール倍率
+  // テキスト装飾
+  const [textBand, setTextBand] = useState(false)                                // 座布団（背景帯）
+  const [textShadowMode, setTextShadowMode] = useState<'none' | 'standard' | 'strong'>('standard')
 
   // selectedImgIdx を使った computed value — downloadCompositeより前に定義
   const generatedImage = generatedImages[selectedImgIdx] ?? null
   const progressRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  // ドラッグ用
+  const previewContainerRef = useRef<HTMLDivElement>(null)
+  const isDraggingProduct = useRef(false)
+  const dragStartData = useRef({ clientX: 0, clientY: 0, startX: 0, startY: 0 })
 
   // ─── バリデーション ─────────────────────────────────────────────────────────
   const validate = () => {
@@ -494,6 +523,30 @@ export default function BannerGenerator() {
     }, 600)
   }
   const stopProgress = (v = 100) => { clearInterval(progressRef.current!); setProgress(v) }
+
+  // ─── 商品画像ドラッグ ──────────────────────────────────────────────────────
+  const handleProductPointerDown = useCallback((e: React.PointerEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    isDraggingProduct.current = true
+    dragStartData.current = { clientX: e.clientX, clientY: e.clientY, startX: productOffsetX, startY: productOffsetY }
+    ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
+  }, [productOffsetX, productOffsetY])
+
+  const handleProductPointerMove = useCallback((e: React.PointerEvent) => {
+    if (!isDraggingProduct.current || !previewContainerRef.current) return
+    const rect = previewContainerRef.current.getBoundingClientRect()
+    const dx = (e.clientX - dragStartData.current.clientX) / rect.width
+    const dy = (e.clientY - dragStartData.current.clientY) / rect.height
+    setProductOffsetX(Math.max(-0.45, Math.min(0.45, dragStartData.current.startX + dx)))
+    setProductOffsetY(Math.max(-0.45, Math.min(0.45, dragStartData.current.startY + dy)))
+  }, [])
+
+  const handleProductPointerUp = useCallback(() => { isDraggingProduct.current = false }, [])
+
+  const resetProductPosition = useCallback(() => {
+    setProductOffsetX(0); setProductOffsetY(0); setProductScale(1.0)
+  }, [])
 
   // ─── 生成処理 ───────────────────────────────────────────────────────────────
   const handleGenerate = useCallback(async () => {
@@ -578,6 +631,7 @@ export default function BannerGenerator() {
     setIsRemovingBg(false)
     setBgRemovalPct(0)
     setBgRemovalError(false)
+    setProductOffsetX(0); setProductOffsetY(0); setProductScale(1.0)
     stopProgress(0)
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
@@ -587,7 +641,7 @@ export default function BannerGenerator() {
     if (!generatedImage) return
     setIsDownloading(true)
     try {
-      const canvas = await renderToCanvas(generatedImage, form.appealText, overlay, fontStyleId, activeStamp, stampPosition, productImageDataUrl, productImagePos, productBgColor, productImageCutoutUrl)
+      const canvas = await renderToCanvas(generatedImage, form.appealText, overlay, fontStyleId, activeStamp, stampPosition, productImageDataUrl, productImagePos, productBgColor, productImageCutoutUrl, productOffsetX, productOffsetY, productScale, textBand, textShadowMode)
       canvas.toBlob(blob => {
         if (!blob) return
         const url = URL.createObjectURL(blob)
@@ -598,7 +652,7 @@ export default function BannerGenerator() {
         URL.revokeObjectURL(url)
       }, 'image/jpeg', 0.93)
     } finally { setIsDownloading(false) }
-  }, [generatedImage, form.appealText, overlay, fontStyleId, activeStamp, stampPosition, productImageDataUrl, productImagePos, productBgColor, productImageCutoutUrl])
+  }, [generatedImage, form.appealText, overlay, fontStyleId, activeStamp, stampPosition, productImageDataUrl, productImagePos, productBgColor, productImageCutoutUrl, productOffsetX, productOffsetY, productScale, textBand, textShadowMode])
 
   const downloadRaw = () => {
     if (!generatedImage) return
@@ -633,9 +687,14 @@ export default function BannerGenerator() {
   // ─── CSS オーバーレイ計算 ────────────────────────────────────────────────────
   const overlayAlignClass = { left: 'justify-start', center: 'justify-center', right: 'justify-end' }[overlay.hAlign]
   const overlayVClass = overlay.vAlign === 'top' ? 'items-start' : 'items-end'
-  const textShadowCSS = overlay.textColor === 'white'
-    ? '1px 1px 0 rgba(0,0,0,0.9),-1px -1px 0 rgba(0,0,0,0.9),1px -1px 0 rgba(0,0,0,0.9),-1px 1px 0 rgba(0,0,0,0.9),0 3px 10px rgba(0,0,0,0.6)'
-    : '1px 1px 0 rgba(255,255,255,0.9),-1px -1px 0 rgba(255,255,255,0.9),1px -1px 0 rgba(255,255,255,0.9),-1px 1px 0 rgba(255,255,255,0.9)'
+  const textShadowCSS = textShadowMode === 'none' ? 'none'
+    : textShadowMode === 'strong'
+      ? (overlay.textColor === 'white'
+          ? '2px 4px 12px rgba(0,0,0,0.95), 1px 1px 0 rgba(0,0,0,1), -1px -1px 0 rgba(0,0,0,1), 1px -1px 0 rgba(0,0,0,1), -1px 1px 0 rgba(0,0,0,1), 0 0 20px rgba(0,0,0,0.8)'
+          : '2px 4px 12px rgba(255,255,255,0.95), 1px 1px 0 rgba(255,255,255,1), -1px -1px 0 rgba(255,255,255,1)')
+      : (overlay.textColor === 'white'
+          ? '1px 1px 0 rgba(0,0,0,0.9),-1px -1px 0 rgba(0,0,0,0.9),1px -1px 0 rgba(0,0,0,0.9),-1px 1px 0 rgba(0,0,0,0.9),0 3px 10px rgba(0,0,0,0.6)'
+          : '1px 1px 0 rgba(255,255,255,0.9),-1px -1px 0 rgba(255,255,255,0.9),1px -1px 0 rgba(255,255,255,0.9),-1px 1px 0 rgba(255,255,255,0.9)')
   const activeFontStyle = FONT_STYLES.find(f => f.id === fontStyleId)!
   const activeStampObj  = STAMPS.find(s => s.id === activeStamp)
   const stampPositionStyle: Record<StampPosition, React.CSSProperties> = {
@@ -1462,13 +1521,23 @@ export default function BannerGenerator() {
                   <div className="h-1" style={{ background: 'linear-gradient(90deg, #10b981, #34d399, #6ee7b7)' }} />
                   {/* 画像プレビュー */}
                   <div className="p-5" style={{ background: 'linear-gradient(160deg, #0f172a, #1e293b)' }}>
-                    <div className="relative overflow-hidden rounded-xl"
+                    <div ref={previewContainerRef} className="relative overflow-hidden rounded-xl"
                       style={{ containerType: 'inline-size' }}>
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img src={generatedImage.dataUrl}
                         alt={`生成バナー ${generatedImage.size.label}`}
                         className="w-full object-cover block"
                         style={{ aspectRatio: generatedImage.size.aspect, maxHeight: '420px' }} />
+
+                      {/* 座布団（テキスト背景帯） */}
+                      {form.appealText && textBand && (
+                        <div className="absolute inset-x-0 pointer-events-none"
+                          style={{
+                            ...(overlay.vAlign === 'bottom' ? { bottom: 0 } : { top: 0 }),
+                            height: '32%',
+                            background: overlay.textColor === 'white' ? 'rgba(0,0,0,0.60)' : 'rgba(255,255,255,0.88)',
+                          }} />
+                      )}
 
                       {/* テキストオーバーレイ */}
                       {form.appealText && (
@@ -1508,7 +1577,7 @@ export default function BannerGenerator() {
                         </div>
                       )}
 
-                      {/* 商品画像オーバーレイ */}
+                      {/* 商品画像オーバーレイ（ドラッグ可能） */}
                       {productImageDataUrl && (
                         <>
                           {/* 背景除去なしの場合のみ背景色ゾーンを表示 */}
@@ -1517,26 +1586,37 @@ export default function BannerGenerator() {
                               style={{
                                 backgroundColor: productBgColor,
                                 ...(productImagePos === 'right'
-                                  ? { right: 0, width: '49%' }
+                                  ? { right: 0, width: '50%' }
                                   : productImagePos === 'left'
-                                    ? { left: 0, width: '49%' }
+                                    ? { left: 0, width: '50%' }
                                     : { left: '25%', width: '50%' }),
                               }} />
                           )}
-                          {/* 商品画像（背景除去済みなら透過PNGを使用） */}
-                          <div className="absolute pointer-events-none flex items-center"
+                          {/* 商品画像（ドラッグ移動・スケール対応） */}
+                          <div
+                            className="absolute select-none"
                             style={{
-                              top: '50%',
-                              maxHeight: '92%',
+                              left: `${(productImagePos === 'center' ? 50 : productImagePos === 'right' ? 75 : 25) + productOffsetX * 100}%`,
+                              top: `${50 + productOffsetY * 100}%`,
+                              transform: `translate(-50%, -50%) scale(${productScale})`,
                               maxWidth: '48%',
-                              ...(productImagePos === 'center'
-                                ? { left: '50%', transform: 'translate(-50%, -50%)' }
-                                : productImagePos === 'right'
-                                  ? { right: '1%', transform: 'translateY(-50%)' }
-                                  : { left: '1%', transform: 'translateY(-50%)' }),
-                            }}>
+                              maxHeight: '92%',
+                              cursor: isDraggingProduct.current ? 'grabbing' : 'grab',
+                              touchAction: 'none',
+                            }}
+                            onPointerDown={handleProductPointerDown}
+                            onPointerMove={handleProductPointerMove}
+                            onPointerUp={handleProductPointerUp}
+                            onPointerCancel={handleProductPointerUp}
+                            title="ドラッグして移動できます"
+                          >
                             {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src={productImageCutoutUrl ?? productImageDataUrl} alt="商品画像" className="max-h-full max-w-full object-contain" />
+                            <img src={productImageCutoutUrl ?? productImageDataUrl} alt="商品画像" className="max-h-full max-w-full object-contain pointer-events-none block" />
+                            {/* ドラッグヒント */}
+                            <div className="absolute -top-5 left-1/2 -translate-x-1/2 text-[9px] font-medium px-1.5 py-0.5 rounded-full whitespace-nowrap opacity-70"
+                              style={{ background: 'rgba(0,0,0,0.6)', color: 'white' }}>
+                              ドラッグ移動
+                            </div>
                           </div>
                         </>
                       )}
@@ -1548,6 +1628,65 @@ export default function BannerGenerator() {
                         ※ Imagen 4 制約により {generatedImage.usedAspectRatio} で生成。DLファイルは {generatedImage.size.width}×{generatedImage.size.height}px に合成されます。
                       </p>
                     )}
+                  </div>
+
+                  {/* ─ 合成コントロールパネル ─ */}
+                  <div className="px-6 py-4 border-t border-slate-100 space-y-4"
+                    style={{ background: 'linear-gradient(135deg, #f8fafc, #f1f5f9)' }}>
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">合成コントロール</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {/* 商品画像コントロール */}
+                      {productImageDataUrl && (
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <label className="text-xs font-semibold text-slate-600">商品画像サイズ</label>
+                            <button onClick={resetProductPosition}
+                              className="text-[10px] text-slate-400 hover:text-slate-600 border border-slate-200 rounded-lg px-2 py-0.5 bg-white transition-colors">
+                              位置リセット
+                            </button>
+                          </div>
+                          <input type="range" min="30" max="200" step="5"
+                            value={Math.round(productScale * 100)}
+                            onChange={e => setProductScale(Number(e.target.value) / 100)}
+                            className="w-full h-1.5 rounded-full appearance-none cursor-pointer"
+                            style={{ accentColor: '#dc2626' }} />
+                          <div className="flex justify-between text-[10px] text-slate-400">
+                            <span>小さく</span>
+                            <span className="font-medium text-slate-600">{Math.round(productScale * 100)}%</span>
+                            <span>大きく</span>
+                          </div>
+                          <p className="text-[10px] text-slate-400">プレビュー上の画像をドラッグして位置調整</p>
+                        </div>
+                      )}
+                      {/* テキスト装飾コントロール */}
+                      {form.appealText && (
+                        <div className="space-y-2">
+                          <label className="text-xs font-semibold text-slate-600 block">テキスト装飾</label>
+                          <div className="space-y-2">
+                            {/* 座布団 */}
+                            <label className="flex items-center gap-2 cursor-pointer">
+                              <input type="checkbox" checked={textBand} onChange={e => setTextBand(e.target.checked)}
+                                className="w-3.5 h-3.5 rounded accent-red-600" />
+                              <span className="text-xs text-slate-600">座布団（テキスト背景帯）</span>
+                            </label>
+                            {/* シャドウ強度 */}
+                            <div>
+                              <p className="text-[10px] text-slate-500 mb-1">影の強さ</p>
+                              <div className="flex gap-1.5">
+                                {(['none', 'standard', 'strong'] as const).map(m => (
+                                  <button key={m} onClick={() => setTextShadowMode(m)}
+                                    className={`flex-1 py-1 text-[10px] font-medium rounded-lg border transition-all
+                                      ${textShadowMode === m ? 'border-red-400 text-red-700' : 'border-slate-200 text-slate-500 bg-white hover:bg-slate-50'}`}
+                                    style={textShadowMode === m ? { background: 'linear-gradient(135deg, #fff1f2, #ffe4e6)' } : {}}>
+                                    {m === 'none' ? 'なし' : m === 'standard' ? '標準' : '強'}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   {/* AI診断レポート */}
