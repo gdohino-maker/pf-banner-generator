@@ -5,7 +5,7 @@ export const maxDuration = 60
 
 const MODEL = 'imagen-4.0-generate-001'
 
-// ─── 型定義 ───────────────────────────────────────────────────────────────────
+// ─── 型定義 ────────────────────────────────────────────────────────────────────
 export type ReasoningPoint = { icon: string; title: string; body: string }
 
 type RequestBody = {
@@ -24,23 +24,7 @@ type RequestBody = {
   variations?: 1 | 2
 }
 
-// ─── デザインスタイル → 背景ムード（物体・商品を描写しない）─────────────────
-const DESIGN_STYLE_PROMPTS: Record<string, string> = {
-  professional:
-    'Refined premium color palette with muted tones and deep shadows. Precise studio lighting with clean soft-box quality. Elegant, restrained, corporate sophistication expressed purely through light and gradient.',
-  pop:
-    'Vibrant bold saturated color gradient. High-energy contrasting colors — bright primary tones with dynamic bokeh bursts. Fun cheerful electric atmosphere through pure color and light.',
-  cute:
-    'Soft kawaii pastel gradient — cherry blossom pink, mint green, lavender, cream white. Warm diffused light with gentle rounded bokeh orbs. Sweet charming atmosphere through delicate color transitions.',
-  appetizing:
-    'Rich warm amber and golden gradient. Saturated warm tones evoking richness and appetite. Soft glowing studio light suggesting warmth and abundance through color temperature and bokeh.',
-  stylish:
-    'High-contrast dark gradient from deep charcoal to pure white or midnight. Dramatic directional studio light with sharp tonal contrast. Fashion-forward editorial minimalism through light and shadow.',
-  natural:
-    'Soft warm earthy gradient — warm beige, sage green, natural linen tones. Gentle natural daylight feel with soft bokeh. Organic airy eco-inspired atmosphere through natural color palette.',
-}
-
-
+// ─── デザインスタイル（日本語ラベル · 診断レポート用）─────────────────────────
 const DESIGN_STYLE_JA: Record<string, string> = {
   professional: 'プロフェッショナル（高級感・信頼感）',
   pop:          'ポップ（元気・活気・インパクト）',
@@ -50,119 +34,261 @@ const DESIGN_STYLE_JA: Record<string, string> = {
   natural:      'ナチュラル（自然・優しい）',
 }
 
-
-// ─── Gemini でウェブ検索して商品のブランドカラーを調べ、Imagen用の色文章を生成 ─
-// 出力はImagenプロンプトに直接埋め込む自然言語の色・ムード記述のみ
-// 絶対に商品形状・物体名を含めない
-async function describeProductVisually(
-  ai: GoogleGenAI,
-  productName: string | undefined,
-  productImageDesc: string | undefined,
-  category: string,
-  target: string,
-  productFeatures?: string,
-  saleInfo?: string,
-  designStyle?: string,
-): Promise<string> {
-  const hasSpecificProduct = !!(productName?.trim())
-
-  const prompt = `You are a color specialist for abstract gradient backgrounds. Your output will be inserted directly into an AI image generation prompt.
-
-${productName ? `Product: "${productName}"` : ''}
-${productImageDesc ? `Product type: "${productImageDesc}"` : ''}
-${category ? `Category: ${category}` : ''}
-${target ? `Target audience: ${target}` : ''}
-${productFeatures ? `Key features: ${productFeatures}` : ''}
-${saleInfo ? `Promotion context: ${saleInfo}` : ''}
-${designStyle ? `Design style preference: ${designStyle}` : ''}
-
-${hasSpecificProduct
-  ? `Search the web NOW for "${productName}". Find the brand's ACTUAL color identity — e.g., M·A·C = matte black and warm gold; Nike = pure white and black; Rohto ReGRO = crimson red and champagne gold; Columbia = navy and orange; Dyson = silver and purple. Use real search results.`
-  : `Use brand knowledge to determine the ideal color palette for this product type.`
+// ─── シーン辞書（Prop Dictionary）────────────────────────────────────────────
+// キーワードで商品を判定し、具体的な撮影環境・小道具を付与
+interface SceneContext {
+  environment: string  // テーブル・背景・空間
+  lighting: string     // ライティング
+  props: string        // 演出小道具（背景ぼかし内）
+  podium: string       // Mode C専用: 商品を置く台座（商品は描かない）
+  sizzle?: string      // Mode B食品専用: シズル感・食欲訴求の追加描写
 }
 
-Write ONE sentence describing the color palette and lighting for the background gradient. This sentence will go directly into an image generation prompt.
+const SCENE_DICT: { pattern: RegExp; ctx: SceneContext }[] = [
+  {
+    pattern: /鰻|うなぎ|ウナギ|蒲焼|うな重|鰻丼/,
+    ctx: {
+      environment: 'dark traditional Japanese hinoki lacquer serving tray, tatami room atmosphere, vintage Japanese high-end dining setting',
+      lighting: 'warm golden dramatic side lighting from paper lantern, soft steam wisps rising, candlelight amber glow',
+      props: 'antique lacquerware bowl with gold trim, bamboo leaf garnish, charcoal grill ember glow in deep background bokeh, sake cup silhouette',
+      podium: 'premium dark lacquered round plate on hinoki wooden slab, premium chopsticks resting beside, antique sake cup in background',
+      sizzle: 'glistening sweet tare sauce dripping with intense caramelized sheen, steam rising from perfectly charred surface, rich amber color depth',
+    },
+  },
+  {
+    pattern: /寿司|すし|刺身|さしみ|海鮮|マグロ|サーモン|イクラ|ウニ|カニ|魚介|海老/,
+    ctx: {
+      environment: 'dark glossy black slate sushi counter surface, minimalist professional sushi bar, authentic Japanese restaurant atmosphere',
+      lighting: 'precise directional spotlight highlighting seafood glistening sheen, cool-white LED restaurant ambient, subtle reflection on slate',
+      props: 'wasabi leaf accent, ceramic soy sauce cup, bamboo leaves, premium Japanese chopsticks, pickled ginger slices corner',
+      podium: 'dark slate slab on woven bamboo mat, ceramic sauce dish accent, premium chopsticks, wasabi leaf decoration',
+      sizzle: 'ultra-fresh jewel-like glistening sheen on fish surface, vibrant jewel-tone color saturation, crystal water droplets',
+    },
+  },
+  {
+    pattern: /和食|日本食|天ぷら|てんぷら|そば|蕎麦|うどん|鍋|丼|焼き魚|煮物|おでん|焼鳥|串焼き/,
+    ctx: {
+      environment: 'dark traditional Japanese wooden table with subtle aged wood grain, warm washi paper ambient backdrop',
+      lighting: 'warm dramatic side lighting, gentle rising steam, golden candlelight warmth, traditional restaurant ambiance',
+      props: 'ceramic Japanese tableware, bamboo serving tray, handmade chopsticks, small bonsai plant in background bokeh',
+      podium: 'dark matte ceramic round plate on wooden placemat, chopsticks placed beside, small ceramic sauce dish',
+      sizzle: 'steam rising delicately, rich sauce sheen and gloss, artisanal premium Japanese presentation',
+    },
+  },
+  {
+    pattern: /和菓子|お菓子|あんこ|餅|もち|どら焼き|団子|羊羹|最中/,
+    ctx: {
+      environment: 'light maple wooden board, washi paper texture accent, traditional Japanese confectionery aesthetic, zen minimalism',
+      lighting: 'soft diffused natural side lighting, delicate gentle shadows, refined and quiet atmosphere',
+      props: 'bamboo leaf, cherry blossom petal, white linen cloth, small ceramic tea cup in bokeh',
+      podium: 'light maple wooden board, bamboo leaf accent, cherry blossom petal, washi paper texture',
+      sizzle: 'delicate artisan texture detail, subtle natural sheen, handcrafted craftsmanship evident',
+    },
+  },
+  {
+    pattern: /パスタ|ピザ|ステーキ|ハンバーグ|洋食|フレンチ|イタリアン|グラタン|チーズ|ハム|ソーセージ/,
+    ctx: {
+      environment: 'dark rustic Italian bistro wooden table, elegant linen tablecloth, warm Michelin-starred candlelit restaurant',
+      lighting: 'warm amber candlelight drama, bokeh restaurant lights in background, cinematic directional side lighting',
+      props: 'wine glass silhouette in bokeh, rustic silver cutlery, fresh herb bundle, artisan sourdough corner',
+      podium: 'white ceramic plate on dark wood restaurant table, linen napkin fold, silver cutlery, wine glass silhouette',
+      sizzle: 'melted cheese pull stretching, rising steam cloud, rich sauce gloss and sheen, dramatic texture close-up',
+    },
+  },
+  {
+    pattern: /スイーツ|ケーキ|チョコ|クッキー|マフィン|パン|ベーカリー|デザート|アイス|プリン|タルト|ドーナツ|クレープ/,
+    ctx: {
+      environment: 'soft white marble pastry surface, Parisian patisserie elegance, light airy editorial',
+      lighting: 'bright diffused natural window light, golden hour warmth, soft delicate shadows',
+      props: 'scattered powdered sugar mist, delicate flower petals, satin ribbon, elegant marble cake stand corner',
+      podium: 'white marble round pedestal, powder sugar dusting, rose petal accent, lace doily texture',
+      sizzle: 'melted chocolate cascade drip, powdered sugar cloud mist, berry glaze jewel sheen, golden butter sheen',
+    },
+  },
+  {
+    pattern: /コーヒー|カフェ|珈琲|ラテ|カプチーノ|エスプレッソ|カフェラテ/,
+    ctx: {
+      environment: 'dark slate third-wave artisan coffee bar counter, specialty cafe atmosphere, warm moody',
+      lighting: 'warm backlit glow through steam, moody atmospheric cafe lighting, rich bokeh background',
+      props: 'scattered premium roasted coffee beans, burlap texture accent, latte art cup in background bokeh, small succulent',
+      podium: 'dark slate coaster on natural wooden table, coffee beans scattered beside, ceramic espresso cup accent',
+      sizzle: 'steam cloud rising from hot liquid, perfect crema surface, rich dark liquid depth with reflection',
+    },
+  },
+  {
+    pattern: /飲料|ドリンク|お茶|緑茶|抹茶|紅茶|ジュース|ビール|ワイン|日本酒|焼酎|ウイスキー|スムージー|ハーブティー/,
+    ctx: {
+      environment: 'polished dark premium stone bar surface, sophisticated high-end bar or cafe atmosphere',
+      lighting: 'dramatic backlit glow highlighting liquid transparency and color, rim lighting on glass surface',
+      props: 'ice cubes catching and refracting light, condensation water beads, citrus slice, fresh mint sprig',
+      podium: 'premium marble coaster, condensation ring accent, ice cube, citrus slice garnish, minimal premium surface',
+      sizzle: 'liquid splash dynamics frozen in time, crystal ice clarity, heavy condensation, backlit liquid jewel glow',
+    },
+  },
+  {
+    pattern: /野菜|果物|フルーツ|オーガニック|新鮮|ヘルシー|サラダ|農産物|農家|産直/,
+    ctx: {
+      environment: 'pristine white marble surface, fresh morning organic farmers market aesthetic, clean and vibrant',
+      lighting: 'bright crisp natural daylight, clean soft shadows, ultra-fresh and vibrant quality',
+      props: 'scattered morning dew water droplets, fresh herb leaves, natural linen cloth, rustic wooden cutting board corner',
+      podium: 'white marble slab, fresh herb sprig accent, folded linen cloth, water droplet accents on surface',
+      sizzle: 'morning dew droplets on fresh surface, vibrant saturated color, crisp texture and freshness detail',
+    },
+  },
+  {
+    pattern: /スキンケア|化粧品|コスメ|美容液|乳液|クリーム|洗顔|化粧水|セラム|ファンデ|リップ|アイシャドウ|マスカラ|香水/,
+    ctx: {
+      environment: 'smooth frosted pearl-white luxury beauty editorial surface, high-end department store aesthetic',
+      lighting: 'soft perfect butterfly lighting, luminous even illumination, subtle specular highlights on surfaces',
+      props: 'draped pearl white silk satin fabric, crystal water droplets on surface, smooth white pebbles, jasmine flowers in bokeh',
+      podium: 'white acrylic transparent cylindrical podium, silk satin drape behind, crystal droplets, delicate floral accent',
+    },
+  },
+  {
+    pattern: /シャンプー|ヘアケア|コンディショナー|育毛|スカルプ|ヘアオイル|ヘアマスク/,
+    ctx: {
+      environment: 'clean white luxury spa bathroom counter, frosted glass background, serene and premium',
+      lighting: 'clean diffused bathroom lighting, fresh airy spa-like quality, bright and calming',
+      props: 'eucalyptus botanical sprig, smooth white river stones, rolled white linen towel, clear glass refraction',
+      podium: 'white ceramic bathroom surface, smooth stone pebble, eucalyptus sprig, clinical minimal premium',
+    },
+  },
+  {
+    pattern: /サプリ|プロテイン|栄養補助|ビタミン|健康食品|コラーゲン|ダイエット|サプリメント|漢方|薬膳/,
+    ctx: {
+      environment: 'clean white clinical precision surface, scientific laboratory aesthetic, trust-building minimal',
+      lighting: 'bright even clean studio lighting, shadowless clinical illumination, fresh and trustworthy',
+      props: 'fresh green botanical leaf, geometric white shape accent, subtle DNA helix bokeh background',
+      podium: 'white cylindrical scientific pedestal, fresh green leaf, clean clinical surface with precision',
+    },
+  },
+  {
+    pattern: /美容|スキン|フェイス|body|ボディ|マッサージ|アロマ|エッセンシャル/,
+    ctx: {
+      environment: 'luxurious spa treatment surface, smooth stone, candle atmosphere, zen wellness',
+      lighting: 'warm soft candlelight glow, relaxing spa ambiance, golden warmth',
+      props: 'smooth river stones, eucalyptus and lavender botanical, candle flame bokeh, water ripple',
+      podium: 'smooth stone spa surface, botanical herbs, candle accent, premium wellness aesthetic',
+    },
+  },
+  {
+    pattern: /服|アパレル|ファッション|コート|ジャケット|シャツ|パンツ|スカート|ニット|ワンピース|トップス|ボトムス/,
+    ctx: {
+      environment: 'industrial concrete studio backdrop, modern minimalist fashion editorial space',
+      lighting: 'high-key diffused studio lighting, clean directional shadows, fashion magazine quality',
+      props: 'minimal garment rack silhouette in background bokeh, concrete pillar accent, fashion editorial texture',
+      podium: 'concrete plinth surface, industrial metal rack element, clean matte fashion backdrop',
+    },
+  },
+  {
+    pattern: /靴|シューズ|スニーカー|ブーツ|サンダル|ヒール|パンプス|ローファー/,
+    ctx: {
+      environment: 'polished high-gloss white studio floor with subtle reflection, premium fashion stage',
+      lighting: 'dramatic directional spotlight, clean silhouette, beautiful floor reflection',
+      props: 'polished reflection floor, geometric clean white backdrop, minimal crisp shadow',
+      podium: 'white polished plinth with floor reflection, clean studio white backdrop, minimal precision',
+    },
+  },
+  {
+    pattern: /家電|PC|パソコン|スマホ|スマートフォン|タブレット|カメラ|イヤホン|ヘッドフォン|スピーカー|ゲーム|デジタル|電子/,
+    ctx: {
+      environment: 'dark space-gray engineered precision surface, Apple-style product photography dark studio set',
+      lighting: 'precise directional rim lighting accent, cool blue-white glow, dramatic premium dark atmosphere',
+      props: 'subtle geometric dark surfaces, precision-cut reflections, abstract tech circuit bokeh background',
+      podium: 'dark matte cylindrical precision podium, subtle blue rim glow, premium dark studio surface',
+    },
+  },
+  {
+    pattern: /アウトドア|登山|キャンプ|ランニング|フィットネス|スポーツ|ヨガ|自転車|サーフ|スキー|トレーニング/,
+    ctx: {
+      environment: 'dramatic natural terrain, rugged granite rock surface, golden hour mountain or coastal backdrop',
+      lighting: 'golden hour dramatic directional sunlight, adventure energy, dynamic cloud shadows',
+      props: 'rugged mountain stone texture, pine and cedar branches bokeh, adventure trail dust and mist',
+      podium: 'natural granite rock slab, pine branch accent, outdoor terrain and sky backdrop',
+    },
+  },
+  {
+    pattern: /インテリア|家具|雑貨|キッチン|リビング|ダイニング|テーブル|椅子|棚|照明|カーテン/,
+    ctx: {
+      environment: 'Scandinavian minimal living room, warm light oak tones, hygge cozy afternoon aesthetic',
+      lighting: 'warm diffused natural window light, soft cozy ambient home glow, golden hour warmth',
+      props: 'small potted succulent plant, folded linen throw, matte ceramic vase in bokeh, oak shelf surface',
+      podium: 'light oak wooden shelf surface, small plant accent, linen fabric drape, warm neutral backdrop',
+    },
+  },
+  {
+    pattern: /ベビー|赤ちゃん|キッズ|子供|マタニティ|おもちゃ|ベビー用品|出産|育児/,
+    ctx: {
+      environment: 'ultra-soft pastel cotton nursery dreamscape, warm gentle baby room, safe and tender',
+      lighting: 'ultra-soft diffused golden natural light, absolutely no harsh shadows, warm protective',
+      props: 'soft cotton blanket fold, small pastel colored ball, hand-knitted texture, tiny plush toy silhouette',
+      podium: 'soft white cotton fabric surface, pastel accent element, gentle rounded organic shapes, warm fiber',
+    },
+  },
+]
 
-Rules:
-- Describe ONLY colors, gradients, and lighting atmosphere — absolutely NO product shapes, bottles, containers, or objects
-- Use vivid specific color adjectives (e.g., "deep matte charcoal black blending into warm champagne gold with subtle rose gold bokeh glow")
-- Match the brand's ACTUAL colors from your search results
-- Output in English only, one sentence, no headers, no bullet points, no explanation`
-
-  try {
-    const config = hasSpecificProduct ? { tools: [{ googleSearch: {} }] } : undefined
-    const result = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      config,
-    })
-    const text = result.text?.trim() ?? ''
-    // 構造化テキスト（"GRADIENT COLORS:"等）が返ってきた場合はクリーンアップ
-    return text.replace(/^(GRADIENT COLORS:|LIGHTING:|MOOD:|BACKGROUND:|COLOR PALETTE:)\s*/i, '').trim()
-  } catch {
-    try {
-      const result = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      })
-      return result.text?.trim() ?? ''
-    } catch {
-      return ''
-    }
-  }
+// カテゴリフォールバックシーン
+const CATEGORY_SCENE_FALLBACK: Record<string, SceneContext> = {
+  '食品・飲料': {
+    environment: 'elegant premium dining table with warm wooden accents, high-end restaurant atmosphere',
+    lighting: 'warm dramatic directional side lighting, golden warmth, atmospheric depth',
+    props: 'premium tableware, herb garnish, atmospheric warm background bokeh',
+    podium: 'premium serving plate on elegant table, food-safe surface, restaurant atmosphere',
+    sizzle: 'appetizing food presentation, steam rising, sauce sheen and gloss',
+  },
+  '美容・コスメ': {
+    environment: 'smooth luxury beauty editorial surface, minimalist department store counter',
+    lighting: 'soft butterfly lighting, luminous even illumination, specular highlights',
+    props: 'silk fabric, floral elements, crystal accents, water droplets',
+    podium: 'white acrylic cylindrical pedestal, silk drape, flower petal accent',
+  },
+  'ファッション': {
+    environment: 'high-fashion editorial studio, clean minimal concrete backdrop',
+    lighting: 'high-key studio lighting, clean directional shadows, fashion quality',
+    props: 'minimal garment rack bokeh, concrete texture, editorial aesthetic',
+    podium: 'clean studio plinth, minimal industrial aesthetic, fashion white',
+  },
+  '家電・PC': {
+    environment: 'dark precision tech studio surface, Apple-level product photography',
+    lighting: 'precise rim lighting, dramatic premium dark atmosphere',
+    props: 'geometric dark surfaces, subtle tech bokeh',
+    podium: 'dark matte pedestal, subtle blue rim glow, precision dark surface',
+  },
+  'スポーツ・アウトドア': {
+    environment: 'dynamic natural terrain, adventure atmosphere, golden hour',
+    lighting: 'dramatic directional outdoor golden light, energy and motion',
+    props: 'natural terrain textures, adventure elements in bokeh',
+    podium: 'natural stone surface, outdoor terrain and sky backdrop',
+  },
+  'インテリア・家具': {
+    environment: 'Scandinavian minimal home setting, warm oak tones, hygge',
+    lighting: 'warm natural window light, cozy home glow',
+    props: 'plant, linen throw, wooden elements, ceramic accents',
+    podium: 'wooden shelf surface, small plant, cozy home backdrop',
+  },
+  'ベビー・マタニティ': {
+    environment: 'soft pastel nursery setting, gentle warm dreamscape',
+    lighting: 'ultra-soft diffused natural light, protective warmth',
+    props: 'soft cotton, pastel accent textures, gentle rounded elements',
+    podium: 'soft fabric surface, pastel color accent, warm organic shapes',
+  },
+  'その他': {
+    environment: 'premium commercial photography studio, sophisticated neutral backdrop',
+    lighting: 'professional balanced studio lighting, even quality illumination',
+    props: 'clean minimal premium props, sophisticated neutral tones',
+    podium: 'clean white studio pedestal, professional neutral backdrop',
+  },
 }
 
-// ─── Gemini で商品画像を分析してバックグラウンド設計ヒントを取得 ──────────────
-async function analyzeProductImage(
-  ai: GoogleGenAI,
-  base64: string,
-  mimeType: string,
-): Promise<string> {
-  try {
-    const result = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: [{
-        role: 'user',
-        parts: [
-          { inlineData: { mimeType, data: base64 } },
-          { text: 'Analyze this product image for commercial banner background design. Answer in English only (max 70 words): 1) Main product colors (2-3 specific colors), 2) Product visual style and mood (2-3 adjectives), 3) What abstract background style, gradient colors, and atmosphere would best showcase this product in a Rakuten commercial banner. Focus on background design, not the product itself.' },
-        ],
-      }],
-    })
-    return result.text ?? ''
-  } catch {
-    return ''
+function detectScene(productDesc: string, category: string): SceneContext {
+  const text = productDesc
+  for (const { pattern, ctx } of SCENE_DICT) {
+    if (pattern.test(text)) return ctx
   }
-}
-
-// ─── Imagen 4 サポートアスペクト比へのマッピング ─────────────────────────────
-function toImagenAspectRatio(width: number, height: number): string {
-  const ratio = width / height
-  if (ratio >= 1.6) return '16:9'
-  if (ratio >= 1.2) return '4:3'
-  if (ratio >= 0.84) return '1:1'
-  if (ratio >= 0.6) return '3:4'
-  return '9:16'
-}
-
-// ─── サイズ比率 → 構図ヒント（Imagen 4 クロップ対応）────────────────────────
-function getSizeCompositionHint(width: number, height: number): string {
-  const ratio = width / height
-  if (ratio >= 5) {
-    return 'CRITICAL COMPOSITION — ULTRA-WIDE PANORAMIC BANNER: The generated 16:9 image will be center-cropped to an extreme horizontal strip. ONLY the center vertical third of the image will be visible — the top third and bottom third will be completely cut off. Design exclusively for the horizontal center band: use a pure horizontal gradient flow, bokeh elements clustered in the center height zone, no visual interest near top or bottom edges.'
-  }
-  if (ratio >= 2.5) {
-    return 'WIDE HORIZONTAL BANNER COMPOSITION: This image will be cropped to a wide strip. Keep all atmospheric visual elements within the center half vertically. Use a strong left-to-right horizontal gradient flow. The final result should feel like a cinematic panoramic sweep.'
-  }
-  if (ratio >= 1.6) {
-    return 'STANDARD HORIZONTAL BANNER: Classic horizontal commercial banner composition. Left side features the main atmospheric color for text legibility. Right side transitions to the product zone. Balanced horizontal flow with natural depth.'
-  }
-  // Square
-  return 'SQUARE FORMAT: Full square balanced composition. The atmospheric gradient and bokeh should flow from corner to corner with equal visual weight on all four sides. No strong horizontal or vertical bias — omnidirectional soft light diffusion.'
+  return CATEGORY_SCENE_FALLBACK[category] ?? CATEGORY_SCENE_FALLBACK['その他']
 }
 
 // ─── Hex → 自然言語カラー名（英語プロンプト用）────────────────────────────────
-// 重要: 絶対にhex文字列をそのまま返さない（Imagenが文字として描画するため）
 function hexToColorDescription(hex: string): string {
   if (!hex || hex.length < 7) return 'deep navy blue'
   const r = parseInt(hex.slice(1, 3), 16)
@@ -217,24 +343,14 @@ function hexToColorPsychology(hex: string): string {
   return 'ブランドカラーとの統一感を演出'
 }
 
-// ─── カテゴリ別背景ムード（抽象背景専用 — 商品・物体を描写しない）──────────
-const CATEGORY_STYLE: Record<string, string> = {
-  '食品・飲料':
-    'Warm inviting color palette with golden amber, rich ochre, and deep warm tones. Soft studio lighting suggesting richness and abundance. The atmosphere evokes warmth and natural authenticity through pure color gradients and diffused light alone.',
-  '美容・コスメ':
-    'Elegant pearl white, soft rose, and champagne gold gradient tones. Gentle butterfly lighting with a luminous glow. Clean sophisticated atmosphere evoking luxury and refinement through smooth color fields and bokeh.',
-  'ファッション':
-    'Clean editorial gradient from pure white to soft cool neutral. Fashion magazine minimalism. Crisp even studio light with subtle tonal shift suggesting style and contemporary sophistication.',
-  '家電・PC':
-    'Cool dark gradient from deep charcoal to midnight blue with precise clean lighting. Tech-forward minimalist atmosphere suggesting innovation and premium quality through abstract tones and precise light.',
-  'スポーツ・アウトドア':
-    'Dynamic high-contrast gradient with bold energetic colors — deep navy, vibrant accent. Strong directional light suggesting power and motion. Active energetic atmosphere through pure color and dramatic lighting.',
-  'インテリア・家具':
-    'Warm natural gradient with soft earth tones, warm beige, and honey oak tones. Gentle ambient light suggesting cozy sophisticated living through smooth color gradients and warm bokeh.',
-  'ベビー・マタニティ':
-    'Soft pastel gradient — gentle blush pink, mint green, and ivory cream. Diffused natural light. Warm protective atmosphere through gentle colors and soft bokeh spheres.',
-  'その他':
-    'Clean versatile gradient with professional studio tones. Balanced contemporary palette with crisp lighting and smooth color transitions.',
+// ─── Imagen 4 サポートアスペクト比へのマッピング ─────────────────────────────
+function toImagenAspectRatio(width: number, height: number): string {
+  const ratio = width / height
+  if (ratio >= 1.6) return '16:9'
+  if (ratio >= 1.2) return '4:3'
+  if (ratio >= 0.84) return '1:1'
+  if (ratio >= 0.6) return '3:4'
+  return '9:16'
 }
 
 // ─── カテゴリ別設計根拠（日本語 · 根拠レポート用）────────────────────────────
@@ -257,74 +373,127 @@ const CATEGORY_REASONING: Record<string, string> = {
     'ユニバーサル商業撮影スタイルで清潔感・視認性・プロフェッショナリズムを最優先に設計。汎用性が高く、複数商材への展開にも対応できます。',
 }
 
-// ─── テキスト配置 → ネガティブスペース記述（英語）────────────────────────────
-function textPositionToSpaceDesc(pos: string): string {
-  const map: Record<string, string> = {
-    'bottom-left':   'lower-left corner area',
-    'bottom-center': 'bottom strip (full width)',
-    'bottom-right':  'lower-right corner area',
-    'top-left':      'upper-left corner area',
-    'top-center':    'top strip (full width)',
-    'top-right':     'upper-right corner area',
+// ─── 商品画像を分析してステージ設計ヒントを取得（Mode C用）──────────────────
+async function analyzeProductImage(
+  ai: GoogleGenAI,
+  base64: string,
+  mimeType: string,
+): Promise<string> {
+  try {
+    const result = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: [{
+        role: 'user',
+        parts: [
+          { inlineData: { mimeType, data: base64 } },
+          { text: 'Analyze this product image for commercial banner background design. Answer in English only (max 60 words): 1) Main product dominant colors (2-3 specific color adjectives), 2) Product material/quality feel (premium/casual/minimal/etc), 3) Best complementary background color palette and mood to showcase this product. Be specific and visual.' },
+        ],
+      }],
+    })
+    return result.text?.trim() ?? ''
+  } catch {
+    return ''
   }
-  return map[pos] ?? 'lower-left or left side of the frame'
 }
 
+// ─── Two-Step Prompting: GeminiがImagenプロンプトを最適生成 ──────────────────
+// Mode B (isHeroShot=true):  商品をヒーローとして描画
+// Mode C (isHeroShot=false): 空の台座・ステージのみ（商品は後から合成）
+async function generateImagenPrompt(
+  ai: GoogleGenAI,
+  input: {
+    productDesc: string
+    category: string
+    designStyle: string
+    colorDesc: string
+    textSide: 'left' | 'right'
+    scene: SceneContext
+    isHeroShot: boolean
+    isUltraWide: boolean
+    isWide: boolean
+    catchcopy?: string
+    productColorHint?: string
+  }
+): Promise<string> {
+  const subjectSide = input.textSide === 'left' ? 'right' : 'left'
 
-// ─── プロンプト構築（Imagen 4用 — 色最優先・物体絶対禁止）──────────────────
-function buildPrompt(input: {
-  productName: string
-  category: string
-  target: string
-  catchcopy: string
-  color: string
-  textPosition?: string
-  designStyle?: string
-  hasProductImage?: boolean
-  productImageAnalysis?: string
-  productBgColor?: string
-  productVisualDesc?: string
-  size?: { width: number; height: number }
-}): string {
-  const compositionHint = input.size ? getSizeCompositionHint(input.size.width, input.size.height) : ''
-  const userColorDesc = hexToColorDescription(input.color)
-  const spaceDesc = textPositionToSpaceDesc(input.textPosition ?? 'bottom-left')
-  const textSide = (input.textPosition ?? 'bottom-left').includes('left') ? 'left' : 'right'
-  const productSide = textSide === 'left' ? 'right' : 'left'
-  const productBgColorDesc = input.productBgColor ? hexToColorDescription(input.productBgColor) : ''
+  const cropWarning = input.isUltraWide
+    ? `CRITICAL CROP: This 16:9 image will be severely cropped to an ultra-wide panoramic banner (~8:1 ratio). ONLY the central 30% height band will be visible — top and bottom thirds are cut off. ALL elements MUST be within the center horizontal strip. Use extreme horizontal composition only.`
+    : input.isWide
+      ? `WIDE CROP: Image will be cropped to a wide horizontal banner. Keep all elements within center 50% height zone. Strong left-to-right cinematic sweep.`
+      : `STANDARD: Rule of thirds. Balanced composition.`
 
-  // 色優先順位: 商品画像サンプリング色 > Geminiブランドカラー > ユーザー選択色
-  let colorSpec: string
-  if (input.hasProductImage && productBgColorDesc) {
-    colorSpec = `smooth gradient from ${userColorDesc} on the ${textSide} side to ${productBgColorDesc} on the ${productSide} side`
-  } else if (input.productVisualDesc) {
-    colorSpec = input.productVisualDesc
-  } else {
-    colorSpec = `${userColorDesc} gradient, lighter toward the ${productSide} side`
+  const geminiInstruction = input.isHeroShot
+    ? `You are a master commercial photographer writing Imagen 4 image generation prompts for premium Japanese e-commerce banners (Rakuten SHOP OF THE YEAR quality).
+
+Write ONE complete Imagen 4 image generation prompt for a HERO PRODUCT SHOT.
+
+PRODUCT TO PHOTOGRAPH: "${input.productDesc}"
+Category: ${input.category || 'general product'}
+Design style: ${input.designStyle || 'professional and premium'}
+Color palette / accent: ${input.colorDesc}
+${input.catchcopy ? `Campaign mood: "${input.catchcopy}"` : ''}
+
+SCENE SETUP:
+- Environment: ${input.scene.environment}
+- Lighting: ${input.scene.lighting}
+- Supporting props (in background bokeh): ${input.scene.props}
+${input.scene.sizzle ? `- Appetite/sizzle appeal: ${input.scene.sizzle}` : ''}
+
+COMPOSITION RULES (MANDATORY):
+- ${cropWarning}
+- TEXT ZONE: The ${input.textSide} side (40% of image width) MUST be completely clear and open negative space for text overlay — nothing in that zone
+- HERO ZONE: Product positioned on the ${subjectSide} side using rule of thirds
+- Camera angle: slightly elevated 30-45 degree perspective for maximum appeal
+- Lens: f/1.8 shallow depth of field, cinema-quality bokeh
+- Overall quality: Hasselblad medium format RAW, professional commercial photography, award-winning editorial quality
+
+OUTPUT RULES: Write ONLY the Imagen 4 prompt text. No explanation, no headers, no intro sentence. Maximum 200 words. English only. Make it vivid, specific, and sensory.`
+    : `You are a commercial photographer writing Imagen 4 prompts for product photography backgrounds.
+
+The client will composite their own product photograph onto this image later.
+ABSOLUTE RULE: The product itself MUST NOT appear. Show ONLY the empty stage/podium.
+
+PRODUCT TYPE (for stage design only): "${input.productDesc}"
+Category: ${input.category || 'general'}
+Accent color palette: ${input.colorDesc}
+${input.productColorHint ? `Product color reference to complement: ${input.productColorHint}` : ''}
+
+EMPTY STAGE TO CREATE:
+- Stage/Podium: ${input.scene.podium}
+- Environment: ${input.scene.environment}
+- Lighting: ${input.scene.lighting}
+- Background props (heavily blurred): ${input.scene.props}
+
+COMPOSITION RULES (MANDATORY):
+- ${cropWarning}
+- TEXT ZONE: The ${input.textSide} side (40% of image width) completely clear for text overlay
+- STAGE: Empty podium/surface on the ${subjectSide} side of frame
+- The stage/podium/plate must be COMPLETELY EMPTY — absolutely no product or object on it
+- Beautiful cinematic bokeh on background, f/1.4 equivalent
+- Premium commercial studio photography quality
+
+OUTPUT RULES: Write ONLY the Imagen 4 prompt. No explanation. Maximum 200 words. English only.`
+
+  try {
+    const result = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: [{ role: 'user', parts: [{ text: geminiInstruction }] }],
+    })
+    const text = result.text?.trim() ?? ''
+    if (text.length > 40) return text
+  } catch (e) {
+    console.warn('[generateImagenPrompt] Gemini call failed, using scene fallback:', e)
   }
 
-  const styleLine = input.designStyle && DESIGN_STYLE_PROMPTS[input.designStyle]
-    ? DESIGN_STYLE_PROMPTS[input.designStyle]
-    : (CATEGORY_STYLE[input.category] ?? CATEGORY_STYLE['その他'])
-
-  const extraMood = [
-    input.catchcopy?.trim() ? `Mood evoked: "${input.catchcopy}".` : '',
-    input.productImageAnalysis ? `Product color harmony reference: ${input.productImageAnalysis}` : '',
-  ].filter(Boolean).join(' ')
-
-  return [
-    // 先頭に物体禁止を明示（Imagenは先頭を最重視）
-    `Pure abstract color gradient wash. Zero objects. Zero products. Zero subjects. Color and light only.`,
-    compositionHint,
-    `COLORS: ${colorSpec}.`,
-    `Seamless smooth gradient field. Soft defocused bokeh spheres of light. Atmospheric studio light bloom from the ${productSide} side. The ${spaceDesc} is perfectly clear and open for text overlay.`,
-    styleLine,
-    extraMood,
-    `ABSOLUTE PROHIBITION — nothing allowed except pure color gradients and bokeh light: NO bottles, NO containers, NO food, NO products, NO shoes, NO clothing, NO hands, NO faces, NO text, NO letters, NO numbers, NO logos, NO recognizable shapes of any kind. Pure abstract color wash only. Any object = complete generation failure.`,
-  ].filter(Boolean).join(' ')
+  // Gemini失敗時フォールバック（シーン辞書から直接構築）
+  const base = `${input.scene.environment}. ${input.scene.lighting}. Supporting props: ${input.scene.props}. ${input.colorDesc} color palette. Cinematic f/1.8 shallow depth of field bokeh, Hasselblad quality. ${input.textSide} side open for text. Rule of thirds.`
+  return input.isHeroShot
+    ? `Professional hero product shot of ${input.productDesc}. ${base}${input.scene.sizzle ? ` ${input.scene.sizzle}.` : ''}`
+    : `Empty ${input.scene.podium}. No product present. ${base}`
 }
 
-// ─── AI診断レポート生成（日本語 · 提案書用）──────────────────────────────────
+// ─── AI診断レポート生成（診断カード用）──────────────────────────────────────
 function buildReasoning(input: {
   productName: string
   category: string
@@ -333,7 +502,6 @@ function buildReasoning(input: {
   color: string
   textPosition?: string
   designStyle?: string
-  referenceUrl?: string
 }): ReasoningPoint[] {
   const colorDesc = hexToColorDescription(input.color)
   const colorPsych = hexToColorPsychology(input.color)
@@ -353,26 +521,24 @@ function buildReasoning(input: {
     {
       icon: '🎯',
       title: '構図設計の根拠',
-      body: `商品「${input.productName}」を画面${productAreaMap[pos] ?? '中央'}に配置し、${textAreaMap[pos] ?? '左下'}にキャッチコピー「${input.catchcopy}」用の35%ネガティブスペースを確保。楽天スマートフォン閲覧時に商品とテキストが干渉しない視線誘導を設計。視認性の黄金比に基づく構図です。`,
+      body: `商品「${input.productName}」を画面${productAreaMap[pos] ?? '中央'}に配置し、${textAreaMap[pos] ?? '左下'}にキャッチコピー「${input.catchcopy}」用のネガティブスペースを確保。三分割法に基づく視線誘導で、楽天スマートフォン閲覧時の視認性を最大化。`,
     },
     {
       icon: '🎨',
       title: 'カラー戦略の根拠',
-      body: `${colorDesc}（${input.color}）をメインアクセントに採用。この色彩は「${colorPsych}」効果を持ち、ターゲット「${input.target}」の購買心理に直接訴求します。競合商品との差別化にも有効なカラー選定です。`,
+      body: `${colorDesc}（${input.color}）をアクセントに採用。この色彩は「${colorPsych}」効果を持ち、ターゲット「${input.target || '一般顧客'}」の購買心理に直接訴求します。`,
     },
     {
       icon: '📸',
-      title: 'カテゴリ演出の根拠',
+      title: 'シーン演出の根拠',
       body: input.designStyle
-        ? `デザインスタイル「${DESIGN_STYLE_JA[input.designStyle] ?? input.designStyle}」を最優先に採用。${catReasoning}`
+        ? `デザインスタイル「${DESIGN_STYLE_JA[input.designStyle] ?? input.designStyle}」を優先採用。${catReasoning}`
         : catReasoning,
     },
     {
       icon: '📱',
       title: '楽天EC最適化の根拠',
-      body: input.referenceUrl
-        ? `参照URL（${input.referenceUrl.slice(0, 40)}...）のページデザイン言語を反映し、楽天市場バナー制作20鉄則に準拠した構図を生成。PCとスマートフォンの両方で最大訴求力を発揮し、サムネイル（200×200px）でも商品が明確に認識できる視認性を確保しています。`
-        : `楽天市場バナー制作20鉄則に準拠した高コントラスト・モバイルファースト構図を採用。PCとスマートフォンの両方で最大訴求力を発揮し、サムネイル（200×200px）でも商品が明確に認識できる視認性を確保しています。`,
+      body: '楽天市場バナー制作20鉄則に準拠した高コントラスト・モバイルファースト構図を採用。PCとスマートフォンの両方で最大訴求力を発揮し、サムネイル（200×200px）でも商品が明確に認識できる視認性を確保。',
     },
   ]
 }
@@ -394,7 +560,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'リクエストの形式が不正です' }, { status: 400 })
   }
 
-  const { productName, productImageDesc, category, target, catchcopy, color, size, textPosition, designStyle, productImageBase64, productImageMimeType, productBgColor, variations } = body
+  const {
+    productName, productImageDesc, category, target, catchcopy,
+    color, size, textPosition, designStyle,
+    productImageBase64, productImageMimeType,
+    variations,
+  } = body
 
   const hasProductImage = !!(productImageBase64 && productImageMimeType)
   if (!hasProductImage && !productName?.trim() && !productImageDesc?.trim()) {
@@ -404,14 +575,54 @@ export async function POST(req: NextRequest) {
   const ai = new GoogleGenAI({ apiKey })
 
   const productIdentifier = [productName, productImageDesc].filter(Boolean).join(' / ') || '商品'
+  const userColorDesc = hexToColorDescription(color)
+  const textSide = (textPosition ?? 'bottom-left').includes('left') ? 'left' as const : 'right' as const
+  const ratio = size.width / size.height
+  const isUltraWide = ratio >= 5
+  const isWide = ratio >= 2.5
 
-  const [productImageAnalysis, productVisualDesc] = await Promise.all([
-    hasProductImage ? analyzeProductImage(ai, productImageBase64!, productImageMimeType!) : Promise.resolve(''),
-    !hasProductImage ? describeProductVisually(ai, productName, productImageDesc, category, target ?? '', undefined, undefined, designStyle) : Promise.resolve(''),
-  ])
+  // シーン検出（キーワードマッチング → 撮影環境・小道具の決定）
+  const scene = detectScene(productIdentifier, category)
 
-  const prompt = buildPrompt({ productName: productIdentifier, category, target: target ?? '', catchcopy, color, textPosition, designStyle, hasProductImage, productImageAnalysis, productBgColor, productVisualDesc, size })
-  const reasoning = buildReasoning({ productName: productIdentifier, category, target: target ?? '', catchcopy, color, textPosition, designStyle })
+  // Mode B (isHeroShot=true): テキスト入力のみ → 商品ヒーローショット
+  // Mode C (isHeroShot=false): 商品画像あり → 空の台座ステージ
+  const isHeroShot = !hasProductImage
+
+  // Mode C: 商品画像を分析して補色・質感情報を取得
+  let productColorHint = ''
+  if (hasProductImage) {
+    try {
+      productColorHint = await analyzeProductImage(ai, productImageBase64!, productImageMimeType!)
+    } catch {
+      // 分析失敗しても続行
+    }
+  }
+
+  // Two-Step Prompting: Geminiが最適なImagenプロンプトを生成
+  const prompt = await generateImagenPrompt(ai, {
+    productDesc: productIdentifier,
+    category: category || '',
+    designStyle: designStyle || '',
+    colorDesc: userColorDesc,
+    textSide,
+    scene,
+    isHeroShot,
+    isUltraWide,
+    isWide,
+    catchcopy: catchcopy?.trim() || undefined,
+    productColorHint: productColorHint || undefined,
+  })
+
+  const reasoning = buildReasoning({
+    productName: productIdentifier,
+    category,
+    target: target ?? '',
+    catchcopy,
+    color,
+    textPosition,
+    designStyle,
+  })
+
   const aspectRatio = toImagenAspectRatio(size.width, size.height)
 
   try {
