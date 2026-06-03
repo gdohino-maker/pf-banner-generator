@@ -459,8 +459,13 @@ async function generateImagenPrompt(
   // 全モード共通: 品質タグ（末尾に付与）
   const qualityTags = `Commercial product photography, 8K resolution, cinematic studio lighting, highly detailed texture, shot on 85mm lens, professional color grading. Overall style: ${styleModifier}.`
 
-  // 全モード共通: ネガティブ指示（hallucination対策 — "typography"等のポジ的言及を除外）
-  const negativeRule = `FORBIDDEN — must never appear: letters, characters, words, writing, scripts, fonts, logos, watermarks, UI elements, signs, labels, numbers, symbols, brand marks.`
+  // ネガティブ指示: Mode Bと Mode Cで分離
+  const negativeRuleBase = `FORBIDDEN — never include: letters, characters, words, writing, scripts, fonts, logos, watermarks, UI elements, signs, labels, numbers, symbols, brand marks.`
+
+  // Mode C は商品オブジェクトも完全禁止
+  const negativeRule = input.isHeroShot
+    ? negativeRuleBase
+    : `${negativeRuleBase} STRICTLY FORBIDDEN OBJECTS: no products, no bottles, no jars, no tubes, no containers, no boxes, no packaging, no cosmetics, no perfume, no skincare items, no food, no electronics, no objects of any kind. The image must contain ONLY pure surface texture, lighting, and blurred atmosphere — completely empty, no subjects whatsoever.`
 
   const geminiInstruction = input.isHeroShot
     ? `You are a master commercial photographer writing Imagen 4 image generation prompts for premium Japanese e-commerce banners (Rakuten SHOP OF THE YEAR quality).
@@ -499,22 +504,22 @@ Category: ${input.category || 'general'}
 Accent color palette: ${input.colorDesc}
 ${input.productColorHint ? `Product colors to complement: ${input.productColorHint}` : ''}
 
-BACKGROUND TO CREATE:
-- View: Top-down flatlay OR straight-on studio backdrop (NO perspective, NO 3D objects in foreground)
-- Surface texture: ${flatlaySurface}
+WHAT TO GENERATE:
+- View: Top-down flatlay OR straight-on studio backdrop ONLY (absolutely no 3D perspective or raised surfaces)
+- Surface: Completely empty flat surface — pure texture only. ${flatlaySurface}. NOTHING placed on the surface. Zero objects.
 - Lighting: ${input.scene.lighting}
-- Background atmosphere (heavily blurred): ${input.scene.props}
+- Background (heavily blurred): ${input.scene.props}
+- Pure texture and lighting only — no products, no objects, no subjects of any kind
 
 COMPOSITION (MANDATORY):
 - ${cropWarning}
-- OPEN ZONE: The ${input.textSide} side (40% of width) must be a vast, clean, elegant negative space — completely minimal and unobstructed
-- SURFACE: Flat textured surface on the ${subjectSide} area, smoothly blurred background
-- Beautiful cinematic bokeh, f/1.4 equivalent depth of field
+- OPEN ZONE: The ${input.textSide} side (40% of width) must be a vast, clean, elegant open area — completely minimal and unobstructed
+- SURFACE: The ${subjectSide} side shows the completely empty flat surface with pure texture, smoothly blurred background atmosphere
+- Beautiful cinematic bokeh background, f/1.4 equivalent depth of field
 
 QUALITY: ${qualityTags}
 
 ${negativeRule}
-- NO 3D objects in foreground, NO podiums, NO raised plates, NO products
 
 OUTPUT RULES: Write ONLY the Imagen 4 prompt. No explanation. Maximum 200 words. English only.`
 
@@ -534,7 +539,7 @@ OUTPUT RULES: Write ONLY the Imagen 4 prompt. No explanation. Maximum 200 words.
   if (input.isHeroShot) {
     return `Hero product shot of ${input.productDesc}. ${input.scene.environment}. ${input.scene.lighting}. Props in bokeh: ${input.scene.props}. ${input.colorDesc} palette. ${input.textSide} half: vast clean elegant negative space, completely empty. ${input.scene.sizzle ?? ''} f/1.8 shallow bokeh. ${qualitySuffix}`
   }
-  return `Top-down flatlay background. ${flatlaySurface}. ${input.scene.lighting}. Out-of-focus atmosphere: ${input.scene.props}. ${input.colorDesc} palette. NO 3D objects in foreground, flat surface only. ${input.textSide} side: vast clean minimal open area. f/1.4 cinematic bokeh. ${qualitySuffix}`
+  return `Top-down flatlay or straight-on studio backdrop. Completely empty flat surface — pure texture only, zero objects, nothing placed on it. ${flatlaySurface}. ${input.scene.lighting}. Heavily blurred atmosphere: ${input.scene.props}. ${input.colorDesc} palette. No products, no bottles, no containers, no objects of any kind. ${input.textSide} side: vast clean open area. f/1.4 cinematic bokeh. ${qualitySuffix}`
 }
 
 // ─── AI診断レポート生成（診断カード用）──────────────────────────────────────

@@ -268,11 +268,13 @@ async function renderToCanvas(
 
   const bgImg = await loadImage(img.dataUrl)
   const iw = bgImg.naturalWidth, ih = bgImg.naturalHeight
-  const canvasRatio = cw / ch, imgRatio = iw / ih
-  let sx = 0, sy = 0, sw = iw, sh = ih
-  if (imgRatio > canvasRatio) { sw = ih * canvasRatio; sx = (iw - sw) / 2 }
-  else { sh = iw / canvasRatio; sy = (ih - sh) / 2 }
-  ctx.drawImage(bgImg, sx, sy, sw, sh, 0, 0, cw, ch)
+  // object-fit: cover — Math.max(scale) でカバーし、中央クロップ
+  const bgScale = Math.max(cw / iw, ch / ih)
+  const srcW = cw / bgScale
+  const srcH = ch / bgScale
+  const srcX = (iw - srcW) / 2
+  const srcY = (ih - srcH) / 2
+  ctx.drawImage(bgImg, srcX, srcY, srcW, srcH, 0, 0, cw, ch)
 
   // 商品画像を背景の上・テキストの下に合成
   const effectiveProductUrl = productImageCutoutUrl ?? productImageDataUrl
