@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 
 // ─── バナーサイズ定義 ─────────────────────────────────────────────────────────
 const BANNER_SIZES = [
@@ -537,6 +537,77 @@ export default function BannerGenerator({ mode = 'concept' }: { mode?: 'concept'
   const resetProductPosition = useCallback(() => {
     setProductOffsetX(0); setProductOffsetY(0); setProductScale(1.0)
   }, [])
+
+  // ─── Smart Auto-Scaling & Positioning ────────────────────────────────────────
+  // バナーサイズ変更 or テキスト位置変更時に商品画像の初期スケール・配置を自動最適化
+  useEffect(() => {
+    if (!productImageDataUrl) return
+
+    const size = BANNER_SIZES[selectedSizeIdx]
+    const cw = size.width, ch = size.height
+    const ratio = cw / ch
+    const isWide = ratio >= 1.6
+
+    const effectiveUrl = productImageCutoutUrl ?? productImageDataUrl
+
+    loadImage(effectiveUrl).then(img => {
+      const nw = img.naturalWidth, nh = img.naturalHeight
+      if (!nw || !nh) return
+
+      // ─── スケール逆算 ──────────────────────────────────────────────────────
+      // renderToCanvas の制約:
+      //   maxH = ch * 0.92 * productScale
+      //   maxW = cw * 0.48 * productScale
+      //   scale = min(maxW/nw, maxH/nh, 1.0)
+      let targetW: number, targetH: number
+
+      if (isWide) {
+        // 横長バナー: 商品高さ = バナー高さの75%
+        targetH = ch * 0.75
+        targetW = nw * (targetH / nh)
+        // cw*0.46 を超えると幅制約に引っかかるため上限補正
+        if (targetW > cw * 0.46) {
+          targetW = cw * 0.46
+          targetH = nh * (targetW / nw)
+        }
+      } else {
+        // スクエア / 縦長: 商品の長辺 = バナー長辺の55%
+        const bannerLong = Math.max(cw, ch)
+        const imgLong    = Math.max(nw, nh)
+        const dsf = (bannerLong * 0.55) / imgLong
+        targetW = nw * dsf
+        targetH = nh * dsf
+      }
+
+      // renderToCanvas の制約がどちらで binding するか判定して productScale を逆算
+      const wRatio = (cw * 0.48) / nw
+      const hRatio = (ch * 0.92) / nh
+      let newScale: number
+      if (wRatio <= hRatio) {
+        newScale = targetW / (cw * 0.48)  // 幅制約が binding
+      } else {
+        newScale = targetH / (ch * 0.92)  // 高さ制約が binding
+      }
+      newScale = Math.max(0.3, Math.min(2.5, newScale))
+
+      // ─── 配置: textSide に連動 ─────────────────────────────────────────────
+      // テキスト左 → 商品を右側 (productImagePos='right', center≈75% of width)
+      // テキスト右 → 商品を左側 (productImagePos='left',  center≈25% of width)
+      const newPos: 'left' | 'center' | 'right' =
+        overlay.hAlign === 'right' ? 'left' : 'right'
+
+      setProductScale(newScale)
+      setProductImagePos(newPos)
+      setProductOffsetX(0)
+      setProductOffsetY(0)
+    }).catch(() => {
+      // 画像ロード失敗時は位置のみ更新
+      setProductImagePos(overlay.hAlign === 'right' ? 'left' : 'right')
+      setProductOffsetX(0)
+      setProductOffsetY(0)
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedSizeIdx, overlay.hAlign, productImageDataUrl, productImageCutoutUrl])
 
   // ─── 生成処理 ───────────────────────────────────────────────────────────────
   const handleGenerate = useCallback(async () => {
