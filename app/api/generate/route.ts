@@ -417,11 +417,37 @@ async function generateImagenPrompt(
 ): Promise<string> {
   const subjectSide = input.textSide === 'left' ? 'right' : 'left'
 
+  // ─── 構図制約 ───────────────────────────────────────────────────────────────
   const cropWarning = input.isUltraWide
-    ? `CRITICAL CROP: This 16:9 image will be severely cropped to an ultra-wide panoramic banner (~8:1 ratio). ONLY the central 30% height band will be visible — top and bottom thirds are cut off. ALL elements MUST be within the center horizontal strip. Use extreme horizontal composition only.`
+    ? `CRITICAL CROP: This 16:9 image will be severely cropped to an ultra-wide panoramic banner (~8:1 ratio). ONLY the central 30% height band will be visible. ALL elements MUST be within the center horizontal strip.`
     : input.isWide
-      ? `WIDE CROP: Image will be cropped to a wide horizontal banner. Keep all elements within center 50% height zone. Strong left-to-right cinematic sweep.`
-      : `STANDARD: Rule of thirds. Balanced composition.`
+      ? `WIDE CROP: Image cropped to wide horizontal banner. All elements must stay within center 50% height zone.`
+      : `STANDARD: Balanced composition.`
+
+  // Mode B: テキスト側の絶対空白を強制する非対称構図
+  const asymmetricRule = `ASYMMETRIC GOLDEN RATIO (MANDATORY): The ENTIRE ${input.textSide} half of the image MUST be completely empty, smooth out-of-focus negative space — zero visual subjects allowed in that zone. The main subject must be placed ENTIRELY on the ${subjectSide} side, occupying only the ${subjectSide} third of the frame. Extreme asymmetry required.`
+
+  // Mode C: シーンのenvironmentからフラットレイ用の素材を導出
+  const flatlaySurface = (() => {
+    const env = input.scene.environment.toLowerCase()
+    if (env.includes('marble')) return 'polished white marble surface with subtle grey veining'
+    if (env.includes('hinoki') || env.includes('lacquer')) return 'dark Japanese lacquer surface with subtle wood grain texture'
+    if (env.includes('slate')) return 'dark matte polished slate surface'
+    if (env.includes('oak') || (env.includes('wood') && !env.includes('dark'))) return 'warm natural light oak wood grain surface'
+    if (env.includes('dark') && env.includes('wood')) return 'dark aged wood grain surface'
+    if (env.includes('concrete')) return 'textured matte concrete surface'
+    if (env.includes('cotton') || env.includes('fabric') || env.includes('pastel')) return 'soft white cotton fabric surface'
+    if (env.includes('stone')) return 'smooth natural stone surface'
+    if (env.includes('white') || env.includes('pearl')) return 'smooth pearl-white studio surface'
+    if (env.includes('dark') || env.includes('space-gray')) return 'dark premium matte surface'
+    return 'clean neutral studio surface with subtle texture'
+  })()
+
+  // 全モード共通: 品質タグ（末尾に付与）
+  const qualityTags = `Commercial product photography, 8K resolution, cinematic studio lighting, highly detailed texture, shot on 85mm lens, professional color grading.`
+
+  // 全モード共通: ネガティブ指示
+  const negativeRule = `ABSOLUTE EXCLUSIONS — never include: no text, no words, no letters, no numbers, no logos, no watermarks, no typography, no UI elements, no signs, no labels, no overlay elements.`
 
   const geminiInstruction = input.isHeroShot
     ? `You are a master commercial photographer writing Imagen 4 image generation prompts for premium Japanese e-commerce banners (Rakuten SHOP OF THE YEAR quality).
@@ -440,38 +466,42 @@ SCENE SETUP:
 - Supporting props (in background bokeh): ${input.scene.props}
 ${input.scene.sizzle ? `- Appetite/sizzle appeal: ${input.scene.sizzle}` : ''}
 
-COMPOSITION RULES (MANDATORY):
+COMPOSITION (MANDATORY):
 - ${cropWarning}
-- TEXT ZONE: The ${input.textSide} side (40% of image width) MUST be completely clear and open negative space for text overlay — nothing in that zone
-- HERO ZONE: Product positioned on the ${subjectSide} side using rule of thirds
-- Camera angle: slightly elevated 30-45 degree perspective for maximum appeal
-- Lens: f/1.8 shallow depth of field, cinema-quality bokeh
-- Overall quality: Hasselblad medium format RAW, professional commercial photography, award-winning editorial quality
+- ${asymmetricRule}
+- Camera: slightly elevated 30-45 degree perspective, 85mm equivalent, f/1.8 shallow depth of field, cinema-quality bokeh
 
-OUTPUT RULES: Write ONLY the Imagen 4 prompt text. No explanation, no headers, no intro sentence. Maximum 200 words. English only. Make it vivid, specific, and sensory.`
+QUALITY: ${qualityTags}
+
+${negativeRule}
+
+OUTPUT RULES: Write ONLY the Imagen 4 prompt text. No explanation, no headers. Maximum 200 words. English only. Make it vivid, specific, and sensory.`
     : `You are a commercial photographer writing Imagen 4 prompts for product photography backgrounds.
 
-The client will composite their own product photograph onto this image later.
-ABSOLUTE RULE: The product itself MUST NOT appear. Show ONLY the empty stage/podium.
+The client will composite their own product photograph onto this image AFTER generation.
+CRITICAL RULE: Use TOP-DOWN FLATLAY or STRAIGHT-ON STUDIO BACKDROP view only. NO 3D podiums, NO raised platforms, NO plates with depth — flat surface only, perfect for overlaying product images.
 
-PRODUCT TYPE (for stage design only): "${input.productDesc}"
+PRODUCT TYPE (for background design): "${input.productDesc}"
 Category: ${input.category || 'general'}
 Accent color palette: ${input.colorDesc}
-${input.productColorHint ? `Product color reference to complement: ${input.productColorHint}` : ''}
+${input.productColorHint ? `Product colors to complement: ${input.productColorHint}` : ''}
 
-EMPTY STAGE TO CREATE:
-- Stage/Podium: ${input.scene.podium}
-- Environment: ${input.scene.environment}
+BACKGROUND TO CREATE:
+- View: Top-down flatlay OR straight-on studio backdrop (NO perspective, NO 3D objects in foreground)
+- Surface texture: ${flatlaySurface}
 - Lighting: ${input.scene.lighting}
-- Background props (heavily blurred): ${input.scene.props}
+- Background atmosphere (heavily blurred): ${input.scene.props}
 
-COMPOSITION RULES (MANDATORY):
+COMPOSITION (MANDATORY):
 - ${cropWarning}
-- TEXT ZONE: The ${input.textSide} side (40% of image width) completely clear for text overlay
-- STAGE: Empty podium/surface on the ${subjectSide} side of frame
-- The stage/podium/plate must be COMPLETELY EMPTY — absolutely no product or object on it
-- Beautiful cinematic bokeh on background, f/1.4 equivalent
-- Premium commercial studio photography quality
+- TEXT ZONE: The ${input.textSide} side (40% of width) completely clear for text overlay
+- SURFACE: Flat textured surface fills the ${subjectSide} area, smoothly blurred background
+- Beautiful cinematic bokeh, f/1.4 equivalent depth of field
+
+QUALITY: ${qualityTags}
+
+${negativeRule}
+- NO 3D objects in foreground, NO podiums, NO raised plates, NO products
 
 OUTPUT RULES: Write ONLY the Imagen 4 prompt. No explanation. Maximum 200 words. English only.`
 
@@ -486,11 +516,12 @@ OUTPUT RULES: Write ONLY the Imagen 4 prompt. No explanation. Maximum 200 words.
     console.warn('[generateImagenPrompt] Gemini call failed, using scene fallback:', e)
   }
 
-  // Gemini失敗時フォールバック（シーン辞書から直接構築）
-  const base = `${input.scene.environment}. ${input.scene.lighting}. Supporting props: ${input.scene.props}. ${input.colorDesc} color palette. Cinematic f/1.8 shallow depth of field bokeh, Hasselblad quality. ${input.textSide} side open for text. Rule of thirds.`
-  return input.isHeroShot
-    ? `Professional hero product shot of ${input.productDesc}. ${base}${input.scene.sizzle ? ` ${input.scene.sizzle}.` : ''}`
-    : `Empty ${input.scene.podium}. No product present. ${base}`
+  // Gemini失敗時フォールバック
+  const qualitySuffix = `Commercial product photography, 8K, cinematic studio lighting, 85mm lens. No text, no logos, no watermarks.`
+  if (input.isHeroShot) {
+    return `Hero product shot of ${input.productDesc}. ${input.scene.environment}. ${input.scene.lighting}. Props in bokeh: ${input.scene.props}. ${input.colorDesc} palette. ${input.textSide} side completely empty for text (extreme asymmetry). f/1.8 bokeh. ${input.scene.sizzle ?? ''} ${qualitySuffix}`
+  }
+  return `Top-down flatlay background. ${flatlaySurface}. ${input.scene.lighting}. Out-of-focus props: ${input.scene.props}. ${input.colorDesc} palette. NO 3D objects in foreground, flat surface only, perfect for product compositing. ${input.textSide} side clear for text. f/1.4 cinematic bokeh. ${qualitySuffix}`
 }
 
 // ─── AI診断レポート生成（診断カード用）──────────────────────────────────────
