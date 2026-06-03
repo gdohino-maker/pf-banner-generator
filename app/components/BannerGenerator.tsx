@@ -18,7 +18,7 @@ const CATEGORIES = [
   'スポーツ・アウトドア', 'インテリア・家具', 'ベビー・マタニティ', 'その他',
 ]
 
-const QUICK_COLORS = ['#bf0000', '#1a1a2e', '#0f3460', '#2d6a4f', '#e76f51', '#264653']
+const QUICK_COLORS = ['#ffffff', '#bf0000', '#1a1a2e', '#0f3460', '#2d6a4f', '#e76f51', '#264653']
 
 const DESIGN_STYLES = [
   { id: 'professional', label: 'プロフェッショナル', emoji: '💼', desc: '高級感・信頼感' },
@@ -30,25 +30,6 @@ const DESIGN_STYLES = [
 ] as const
 type DesignStyleId = typeof DESIGN_STYLES[number]['id']
 
-const CAMPAIGN_TYPES = [
-  { id: 'sale',    label: 'セール',       emoji: '🔥', desc: '割引・値引き訴求' },
-  { id: 'new',     label: '新商品',       emoji: '✨', desc: '新発売・新登場' },
-  { id: 'season',  label: '季節限定',     emoji: '🌸', desc: '季節・イベント向け' },
-  { id: 'ranking', label: 'ランキング',   emoji: '🏆', desc: '人気No.1・ランキング' },
-  { id: 'set',     label: 'まとめ買い',   emoji: '📦', desc: 'セット・まとめ売り' },
-  { id: 'gift',    label: 'ギフト',       emoji: '🎁', desc: 'プレゼント・贈り物' },
-] as const
-type CampaignTypeId = typeof CAMPAIGN_TYPES[number]['id']
-
-const COPY_TONES = [
-  { id: 'premium',  label: '高級感',    emoji: '💎', desc: 'プレミアム・上質' },
-  { id: 'bargain',  label: 'お得感',    emoji: '💰', desc: 'コスパ・値ごろ感' },
-  { id: 'urgent',   label: '緊急感',    emoji: '⚡', desc: '期間限定・今すぐ' },
-  { id: 'safe',     label: '安心感',    emoji: '🛡️', desc: '信頼・実績・保証' },
-  { id: 'health',   label: '健康・美容', emoji: '🌿', desc: 'ナチュラル・美容・健康' },
-  { id: 'fun',      label: '楽しさ',    emoji: '😊', desc: 'ワクワク・にぎやか' },
-] as const
-type CopyToneId = typeof COPY_TONES[number]['id']
 
 const FONT_STYLES = [
   {
@@ -135,18 +116,13 @@ type GeneratedImage = {
 }
 
 type FormData = {
-  productName: string      // 商品名・型番・ブランド（任意）
-  productImageDesc: string // 商品イメージ・カテゴリ（任意）
+  productName: string
+  productImageDesc: string
   category: string
   target: string
   appealText: string
   mainColor: string
-  referenceUrl: string
   designStyle: DesignStyleId | ''
-  productFeatures: string
-  saleInfo: string
-  campaignType: CampaignTypeId | ''
-  copyTone: CopyToneId | ''
 }
 
 type OverlaySettings = {
@@ -448,16 +424,15 @@ function StepIndicator({ current }: { current: number }) {
 }
 
 // ─── メインコンポーネント ─────────────────────────────────────────────────────
-export default function BannerGenerator() {
+export default function BannerGenerator({ mode = 'concept' }: { mode?: 'concept' | 'product' }) {
   const [step, setStep] = useState<1 | 2 | 3>(1)
 
   // Step 1
   const [form, setForm] = useState<FormData>({
     productName: '', productImageDesc: '', category: '', target: '', appealText: '', mainColor: '#bf0000',
-    referenceUrl: '', designStyle: '',
-    productFeatures: '', saleInfo: '', campaignType: '', copyTone: '',
+    designStyle: '',
   })
-  const [errors, setErrors] = useState<Partial<FormData>>({})
+  const [errors, setErrors] = useState<Record<string, string>>({})
 
   // Step 2
   const [selectedSizeIdx, setSelectedSizeIdx] = useState(1) // PC特集バナーをデフォルト
@@ -505,9 +480,12 @@ export default function BannerGenerator() {
 
   // ─── バリデーション ─────────────────────────────────────────────────────────
   const validate = () => {
-    const next: Partial<FormData> = {}
-    if (!form.productName.trim() && !form.productImageDesc.trim()) next.productName = '商品名またはイメージのどちらかを入力してください'
-    if (!form.target.trim())      next.target      = 'ターゲットを入力してください'
+    const next: Record<string, string> = {}
+    if (mode === 'product') {
+      if (!productImageDataUrl) next.productImage = '商品画像をアップロードしてください'
+    } else {
+      if (!form.productImageDesc.trim()) next.productImageDesc = 'バナーイメージを入力してください'
+    }
     setErrors(next)
     return Object.keys(next).length === 0
   }
@@ -571,20 +549,15 @@ export default function BannerGenerator() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          productName: form.productName || undefined,
+          productName: mode === 'product' ? undefined : (form.productName || undefined),
           productImageDesc: form.productImageDesc || undefined,
           category: form.category,
           target: form.target, catchcopy: form.appealText,
           color: form.mainColor, size, textPosition,
-          referenceUrl: form.referenceUrl || undefined,
           designStyle: form.designStyle || undefined,
           productImageBase64,
           productImageMimeType,
           productBgColor: productImageDataUrl ? productBgColor : undefined,
-          productFeatures: form.productFeatures || undefined,
-          saleInfo: form.saleInfo || undefined,
-          campaignType: form.campaignType || undefined,
-          copyTone: form.copyTone || undefined,
           variations,
         }),
       })
@@ -767,38 +740,129 @@ export default function BannerGenerator() {
                   <span className="text-[9px] font-black tracking-[0.18em] uppercase px-2 py-0.5 rounded-full"
                     style={{ background: 'linear-gradient(135deg, #fff1f2, #ffe4e6)', color: '#be123c' }}>STEP 1 / 3</span>
                 </div>
-                <h2 className="text-xl font-bold text-slate-900 tracking-tight">商品情報の入力</h2>
-                <p className="text-sm text-slate-500 mt-1 leading-relaxed">AIが最適なバナーを設計するための情報を入力してください</p>
+                <h2 className="text-xl font-bold text-slate-900 tracking-tight">
+                  {mode === 'product' ? '商品画像のアップロード' : 'バナーイメージの入力'}
+                </h2>
+                <p className="text-sm text-slate-500 mt-1 leading-relaxed">
+                  {mode === 'product'
+                    ? '商品画像をアップロードするとAIが自動で背景を除去し合成バナーを生成します'
+                    : 'どんな雰囲気のバナーにしたいか、イメージを自由に記述してください'}
+                </p>
               </div>
 
               <div className="px-8 py-7 space-y-5">
-                {/* 商品名・型番・ブランド と 商品イメージ */}
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2 mb-0.5">
-                    <span className="text-sm font-semibold text-slate-700">商品情報</span>
-                    <span className="text-[10px] font-normal text-slate-500 border border-slate-200 rounded-full px-2 py-0.5">どちらか一方必須</span>
-                  </div>
+
+                {/* concept mode: バナーイメージ記述（必須） */}
+                {mode !== 'product' && (
                   <div>
-                    <label className="block text-xs font-medium text-slate-500 mb-1">商品名・型番・ブランド</label>
-                    <input type="text" value={form.productName}
-                      onChange={e => setForm(f => ({ ...f, productName: e.target.value }))}
-                      placeholder="例：Columbia YH4977、Sony WH-1000XM5、ローストコーヒー"
-                      className={`w-full px-4 py-3 text-sm rounded-xl border outline-none transition-all
-                        ${errors.productName
+                    <label className="block text-sm font-semibold text-slate-700 mb-1.5">
+                      バナーイメージ <span className="text-red-500">*</span>
+                    </label>
+                    <textarea value={form.productImageDesc}
+                      onChange={e => setForm(f => ({ ...f, productImageDesc: e.target.value }))}
+                      placeholder={'例：\n・秋の紅葉の温かみ、黄金色とオレンジのグラデーション\n・高級感のある黒×シャンパンゴールド\n・夏の爽やかな青空と白いボケ光'}
+                      rows={4}
+                      className={`w-full px-4 py-3 text-sm rounded-xl border outline-none transition-all resize-none
+                        ${errors.productImageDesc
                           ? 'border-red-400 bg-red-50 focus:ring-2 focus:ring-red-100'
                           : 'border-slate-200 bg-white focus:border-red-400 focus:ring-2 focus:ring-red-50'}`}
                     />
+                    {errors.productImageDesc && <p className="text-red-500 text-xs mt-1">{errors.productImageDesc}</p>}
+                    <p className="text-[11px] text-slate-400 mt-1.5">AIがイメージに合った抽象背景グラデーションを生成します</p>
                   </div>
+                )}
+
+                {/* product mode: 商品画像アップロード（必須） */}
+                {mode === 'product' && (
                   <div>
-                    <label className="block text-xs font-medium text-slate-500 mb-1">商品イメージ・カテゴリ</label>
-                    <input type="text" value={form.productImageDesc}
-                      onChange={e => setForm(f => ({ ...f, productImageDesc: e.target.value }))}
-                      placeholder="例：うなぎ2人前、メンズTシャツ、アウトドアシューズ"
-                      className="w-full px-4 py-3 text-sm rounded-xl border border-slate-200 bg-white outline-none focus:border-red-400 focus:ring-2 focus:ring-red-50 transition-all"
-                    />
+                    <label className="block text-sm font-semibold text-slate-700 mb-1.5">
+                      商品画像 <span className="text-red-500">*</span>
+                      <span className="ml-2 text-[10px] font-normal text-slate-400 border border-slate-200 rounded-full px-2 py-0.5">AI背景自動除去</span>
+                    </label>
+                    <label className="flex flex-col items-center justify-center w-full h-44 border-2 border-dashed rounded-xl cursor-pointer transition-all relative overflow-hidden"
+                      style={{ borderColor: productImageDataUrl ? '#fca5a5' : errors.productImage ? '#f87171' : '#e2e8f0', background: productImageDataUrl ? (productImageCutoutUrl ? 'repeating-conic-gradient(#e5e7eb 0% 25%, white 0% 50%) 0 0 / 16px 16px' : '#fff1f2') : errors.productImage ? '#fef2f2' : 'white' }}>
+                      {productImageDataUrl ? (
+                        <>
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={productImageCutoutUrl ?? productImageDataUrl} alt="商品画像プレビュー" className="h-full w-full object-contain p-2" />
+                          {isRemovingBg && (
+                            <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5"
+                              style={{ background: 'rgba(255,255,255,0.90)', backdropFilter: 'blur(3px)' }}>
+                              <svg className="w-5 h-5 animate-spin text-red-500" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                              </svg>
+                              <span className="text-xs font-semibold text-red-600">AI背景除去中{bgRemovalPct > 0 ? ` ${bgRemovalPct}%` : '...'}</span>
+                              <span className="text-[10px] text-slate-400">{bgRemovalPct === 0 ? '初回はモデル読込に30秒ほど' : bgRemovalPct < 80 ? '推論中...' : 'もうすぐ完了'}</span>
+                            </div>
+                          )}
+                          {!isRemovingBg && (
+                            <div className="absolute inset-0 bg-black/0 hover:bg-black/25 transition-colors flex items-center justify-center opacity-0 hover:opacity-100">
+                              <span className="text-white text-xs font-bold bg-black/40 px-3 py-1 rounded-full">変更</span>
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        <div className="flex flex-col items-center gap-2 text-slate-400 pointer-events-none">
+                          <svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                          </svg>
+                          <span className="text-sm font-semibold">クリックして商品画像を選択</span>
+                          <span className="text-xs">PNG / JPG / WEBP</span>
+                        </div>
+                      )}
+                      <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" className="hidden"
+                        onChange={e => {
+                          const file = e.target.files?.[0]
+                          if (!file) return
+                          const reader = new FileReader()
+                          reader.onload = async ev => {
+                            const url = ev.target?.result as string
+                            setProductImageDataUrl(url)
+                            setProductImageCutoutUrl(null)
+                            setBgRemovalError(false)
+                            setBgRemovalPct(0)
+                            setIsRemovingBg(true)
+                            const bg = await sampleCornerColor(url)
+                            setProductBgColor(bg)
+                            const cutout = await removeProductBackground(url, pct => setBgRemovalPct(pct))
+                            if (cutout) {
+                              setProductImageCutoutUrl(cutout)
+                            } else {
+                              setBgRemovalError(true)
+                              setProductImageCutoutUrl(null)
+                            }
+                            setIsRemovingBg(false)
+                          }
+                          reader.readAsDataURL(file)
+                          e.target.value = ''
+                        }} />
+                    </label>
+                    {productImageDataUrl && (
+                      <div className="flex items-center gap-3 mt-1.5">
+                        <button onClick={() => { setProductImageDataUrl(null); setProductImageCutoutUrl(null); setIsRemovingBg(false); setBgRemovalError(false); setBgRemovalPct(0) }}
+                          className="text-xs text-slate-400 hover:text-red-500 transition-colors">
+                          画像を削除
+                        </button>
+                        {productImageCutoutUrl && !isRemovingBg && (
+                          <span className="flex items-center gap-1 text-[10px] font-semibold text-emerald-600 bg-emerald-50 border border-emerald-200 rounded-full px-2 py-0.5">
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                            </svg>
+                            背景除去済み
+                          </span>
+                        )}
+                        {bgRemovalError && !isRemovingBg && (
+                          <span className="flex items-center gap-1 text-[10px] font-semibold text-amber-600 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">
+                            ⚠ 背景除去失敗（元画像で合成）
+                          </span>
+                        )}
+                      </div>
+                    )}
+                    {errors.productImage && <p className="text-red-500 text-xs mt-1.5">{errors.productImage}</p>}
+                    <p className="text-[11px] text-slate-400 mt-1.5">アップロード後、AIが自動で背景を除去してバナーに合成します</p>
                   </div>
-                  {errors.productName && <p className="text-red-500 text-xs mt-0.5">{errors.productName}</p>}
-                </div>
+                )}
 
                 {/* カテゴリ */}
                 <div>
@@ -810,35 +874,17 @@ export default function BannerGenerator() {
                   </select>
                 </div>
 
-                {/* 商品の特長・USP */}
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">
-                    商品の特長・セールスポイント
-                    <span className="ml-2 text-[10px] font-normal text-slate-400 border border-slate-200 rounded-full px-2 py-0.5">任意</span>
-                  </label>
-                  <textarea value={form.productFeatures}
-                    onChange={e => setForm(f => ({ ...f, productFeatures: e.target.value }))}
-                    placeholder={'例：\n・無添加・オーガニック原料使用\n・楽天ランキング1位獲得\n・1回分あたり〇〇円のコスパ'}
-                    rows={3}
-                    className="w-full px-4 py-3 text-sm rounded-xl border border-slate-200 bg-white outline-none focus:border-red-400 focus:ring-2 focus:ring-red-50 transition-all resize-none"
-                  />
-                  <p className="text-[11px] text-slate-400 mt-1.5">入力するとAIがこれらの特長を画像のビジュアルで表現します</p>
-                </div>
-
                 {/* ターゲット */}
                 <div>
                   <label className="block text-sm font-semibold text-slate-700 mb-1.5">
-                    ターゲット <span className="text-red-500">*</span>
+                    ターゲット
+                    <span className="ml-2 text-[10px] font-normal text-slate-400 border border-slate-200 rounded-full px-2 py-0.5">任意</span>
                   </label>
                   <input type="text" value={form.target}
                     onChange={e => setForm(f => ({ ...f, target: e.target.value }))}
                     placeholder="例：30〜40代の健康意識が高い男性"
-                    className={`w-full px-4 py-3 text-sm rounded-xl border outline-none transition-all
-                      ${errors.target
-                        ? 'border-red-400 bg-red-50 focus:ring-2 focus:ring-red-100'
-                        : 'border-slate-200 bg-white focus:border-red-400 focus:ring-2 focus:ring-red-50'}`}
+                    className="w-full px-4 py-3 text-sm rounded-xl border border-slate-200 bg-white outline-none focus:border-red-400 focus:ring-2 focus:ring-red-50 transition-all"
                   />
-                  {errors.target && <p className="text-red-500 text-xs mt-1.5">{errors.target}</p>}
                 </div>
 
                 {/* 訴求テキスト */}
@@ -856,191 +902,98 @@ export default function BannerGenerator() {
                   <p className="text-[11px] text-slate-400 mt-1.5">空欄にするとテキスト非表示のバナーになります</p>
                 </div>
 
-                {/* 価格・割引情報 */}
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">
-                    価格・割引情報
-                    <span className="ml-2 text-[10px] font-normal text-slate-400 border border-slate-200 rounded-full px-2 py-0.5">任意</span>
-                  </label>
-                  <input type="text" value={form.saleInfo}
-                    onChange={e => setForm(f => ({ ...f, saleInfo: e.target.value }))}
-                    placeholder="例：30%OFF、¥2,980（税込）、定価の半額、送料込み"
-                    className="w-full px-4 py-3 text-sm rounded-xl border border-slate-200 bg-white outline-none focus:border-red-400 focus:ring-2 focus:ring-red-50 transition-all"
-                  />
-                  <p className="text-[11px] text-slate-400 mt-1.5">AIが商業的なエネルギーをビジュアルに反映します</p>
-                </div>
-
-                {/* キャンペーン種別 */}
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-2.5">
-                    キャンペーン種別
-                    <span className="ml-2 text-[10px] font-normal text-slate-400 border border-slate-200 rounded-full px-2 py-0.5">任意</span>
-                  </label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {CAMPAIGN_TYPES.map(ct => (
-                      <button key={ct.id}
-                        onClick={() => setForm(f => ({ ...f, campaignType: f.campaignType === ct.id ? '' : ct.id as CampaignTypeId }))}
-                        className="flex items-center gap-2 px-3 py-2.5 rounded-xl border text-left transition-all hover:scale-[1.02] active:scale-100"
-                        style={form.campaignType === ct.id ? {
-                          background: 'linear-gradient(135deg, #fff1f2, #ffe4e6)',
-                          borderColor: '#fca5a5',
-                          boxShadow: '0 0 0 2px rgba(220,38,38,0.15)',
-                        } : { borderColor: '#e2e8f0', background: 'white' }}>
-                        <span className="text-base leading-none flex-shrink-0">{ct.emoji}</span>
-                        <div className="min-w-0">
-                          <p className={`text-xs font-bold leading-none mb-0.5 ${form.campaignType === ct.id ? 'text-red-700' : 'text-slate-700'}`}>{ct.label}</p>
-                          <p className="text-[10px] text-slate-400 leading-tight">{ct.desc}</p>
+                {/* concept mode: 商品画像（任意） */}
+                {mode !== 'product' && (
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-1.5">
+                      商品画像
+                      <span className="ml-2 text-[10px] font-normal text-slate-400 border border-slate-200 rounded-full px-2 py-0.5">任意</span>
+                    </label>
+                    <label className="flex flex-col items-center justify-center w-full h-28 border-2 border-dashed rounded-xl cursor-pointer transition-all relative overflow-hidden"
+                      style={{ borderColor: productImageDataUrl ? '#fca5a5' : '#e2e8f0', background: productImageDataUrl ? (productImageCutoutUrl ? 'repeating-conic-gradient(#e5e7eb 0% 25%, white 0% 50%) 0 0 / 16px 16px' : '#fff1f2') : 'white' }}>
+                      {productImageDataUrl ? (
+                        <>
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={productImageCutoutUrl ?? productImageDataUrl} alt="商品画像プレビュー" className="h-full w-full object-contain p-2" />
+                          {isRemovingBg && (
+                            <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5"
+                              style={{ background: 'rgba(255,255,255,0.90)', backdropFilter: 'blur(3px)' }}>
+                              <svg className="w-5 h-5 animate-spin text-red-500" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                              </svg>
+                              <span className="text-xs font-semibold text-red-600">AI背景除去中{bgRemovalPct > 0 ? ` ${bgRemovalPct}%` : '...'}</span>
+                              <span className="text-[10px] text-slate-400">{bgRemovalPct === 0 ? '初回はモデル読込に30秒ほど' : bgRemovalPct < 80 ? '推論中...' : 'もうすぐ完了'}</span>
+                            </div>
+                          )}
+                          {!isRemovingBg && (
+                            <div className="absolute inset-0 bg-black/0 hover:bg-black/25 transition-colors flex items-center justify-center opacity-0 hover:opacity-100">
+                              <span className="text-white text-xs font-bold bg-black/40 px-3 py-1 rounded-full">変更</span>
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        <div className="flex flex-col items-center gap-1.5 text-slate-400 pointer-events-none">
+                          <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                          </svg>
+                          <span className="text-xs font-medium">クリックして画像を選択</span>
+                          <span className="text-[10px]">PNG / JPG / WEBP</span>
                         </div>
-                      </button>
-                    ))}
-                  </div>
-                  {form.campaignType && (
-                    <button onClick={() => setForm(f => ({ ...f, campaignType: '' }))}
-                      className="mt-2 text-xs text-slate-400 hover:text-slate-600 transition-colors">選択をクリア</button>
-                  )}
-                </div>
-
-                {/* コピートーン */}
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-2.5">
-                    コピートーン
-                    <span className="ml-2 text-[10px] font-normal text-slate-400 border border-slate-200 rounded-full px-2 py-0.5">任意</span>
-                  </label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {COPY_TONES.map(ct => (
-                      <button key={ct.id}
-                        onClick={() => setForm(f => ({ ...f, copyTone: f.copyTone === ct.id ? '' : ct.id as CopyToneId }))}
-                        className="flex items-center gap-2 px-3 py-2.5 rounded-xl border text-left transition-all hover:scale-[1.02] active:scale-100"
-                        style={form.copyTone === ct.id ? {
-                          background: 'linear-gradient(135deg, #fff1f2, #ffe4e6)',
-                          borderColor: '#fca5a5',
-                          boxShadow: '0 0 0 2px rgba(220,38,38,0.15)',
-                        } : { borderColor: '#e2e8f0', background: 'white' }}>
-                        <span className="text-base leading-none flex-shrink-0">{ct.emoji}</span>
-                        <div className="min-w-0">
-                          <p className={`text-xs font-bold leading-none mb-0.5 ${form.copyTone === ct.id ? 'text-red-700' : 'text-slate-700'}`}>{ct.label}</p>
-                          <p className="text-[10px] text-slate-400 leading-tight">{ct.desc}</p>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                  {form.copyTone && (
-                    <button onClick={() => setForm(f => ({ ...f, copyTone: '' }))}
-                      className="mt-2 text-xs text-slate-400 hover:text-slate-600 transition-colors">選択をクリア</button>
-                  )}
-                </div>
-
-                {/* 参照URL */}
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">
-                    楽天ページURL
-                    <span className="ml-2 text-[10px] font-normal text-slate-400 border border-slate-200 rounded-full px-2 py-0.5">任意</span>
-                  </label>
-                  <div className="relative">
-                    <input type="url" value={form.referenceUrl}
-                      onChange={e => setForm(f => ({ ...f, referenceUrl: e.target.value }))}
-                      placeholder="https://item.rakuten.co.jp/shop/item/"
-                      className="w-full pl-9 pr-4 py-3 text-sm rounded-xl border border-slate-200 bg-white outline-none focus:border-red-400 focus:ring-2 focus:ring-red-50 transition-all"
-                    />
-                    <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-                    </svg>
-                  </div>
-                  <p className="text-[11px] text-slate-400 mt-1.5 leading-relaxed">
-                    商品ページのURLを入力するとデザインの雰囲気を参考にして生成します
-                  </p>
-                </div>
-
-                {/* 商品画像アップロード */}
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">
-                    商品画像
-                    <span className="ml-2 text-[10px] font-normal text-slate-400 border border-slate-200 rounded-full px-2 py-0.5">任意</span>
-                  </label>
-                  <label className="flex flex-col items-center justify-center w-full h-28 border-2 border-dashed rounded-xl cursor-pointer transition-all relative overflow-hidden"
-                    style={{ borderColor: productImageDataUrl ? '#fca5a5' : '#e2e8f0', background: productImageDataUrl ? (productImageCutoutUrl ? 'repeating-conic-gradient(#e5e7eb 0% 25%, white 0% 50%) 0 0 / 16px 16px' : '#fff1f2') : 'white' }}>
-                    {productImageDataUrl ? (
-                      <>
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={productImageCutoutUrl ?? productImageDataUrl} alt="商品画像プレビュー" className="h-full w-full object-contain p-2" />
-                        {isRemovingBg && (
-                          <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5"
-                            style={{ background: 'rgba(255,255,255,0.90)', backdropFilter: 'blur(3px)' }}>
-                            <svg className="w-5 h-5 animate-spin text-red-500" fill="none" viewBox="0 0 24 24">
-                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      )}
+                      <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" className="hidden"
+                        onChange={e => {
+                          const file = e.target.files?.[0]
+                          if (!file) return
+                          const reader = new FileReader()
+                          reader.onload = async ev => {
+                            const url = ev.target?.result as string
+                            setProductImageDataUrl(url)
+                            setProductImageCutoutUrl(null)
+                            setBgRemovalError(false)
+                            setBgRemovalPct(0)
+                            setIsRemovingBg(true)
+                            const bg = await sampleCornerColor(url)
+                            setProductBgColor(bg)
+                            const cutout = await removeProductBackground(url, pct => setBgRemovalPct(pct))
+                            if (cutout) {
+                              setProductImageCutoutUrl(cutout)
+                            } else {
+                              setBgRemovalError(true)
+                              setProductImageCutoutUrl(null)
+                            }
+                            setIsRemovingBg(false)
+                          }
+                          reader.readAsDataURL(file)
+                          e.target.value = ''
+                        }} />
+                    </label>
+                    {productImageDataUrl && (
+                      <div className="flex items-center gap-3 mt-1.5">
+                        <button onClick={() => { setProductImageDataUrl(null); setProductImageCutoutUrl(null); setIsRemovingBg(false); setBgRemovalError(false); setBgRemovalPct(0) }}
+                          className="text-xs text-slate-400 hover:text-red-500 transition-colors">
+                          画像を削除
+                        </button>
+                        {productImageCutoutUrl && !isRemovingBg && (
+                          <span className="flex items-center gap-1 text-[10px] font-semibold text-emerald-600 bg-emerald-50 border border-emerald-200 rounded-full px-2 py-0.5">
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
                             </svg>
-                            <span className="text-xs font-semibold text-red-600">AI背景除去中{bgRemovalPct > 0 ? ` ${bgRemovalPct}%` : '...'}</span>
-                            <span className="text-[10px] text-slate-400">{bgRemovalPct === 0 ? '初回はモデル読込に30秒ほど' : bgRemovalPct < 80 ? '推論中...' : 'もうすぐ完了'}</span>
-                          </div>
+                            背景除去済み
+                          </span>
                         )}
-                        {!isRemovingBg && (
-                          <div className="absolute inset-0 bg-black/0 hover:bg-black/25 transition-colors flex items-center justify-center opacity-0 hover:opacity-100">
-                            <span className="text-white text-xs font-bold bg-black/40 px-3 py-1 rounded-full">変更</span>
-                          </div>
+                        {bgRemovalError && !isRemovingBg && (
+                          <span className="flex items-center gap-1 text-[10px] font-semibold text-amber-600 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">
+                            ⚠ 背景除去失敗（元画像で合成）
+                          </span>
                         )}
-                      </>
-                    ) : (
-                      <div className="flex flex-col items-center gap-1.5 text-slate-400 pointer-events-none">
-                        <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                        </svg>
-                        <span className="text-xs font-medium">クリックして画像を選択</span>
-                        <span className="text-[10px]">PNG / JPG / WEBP</span>
                       </div>
                     )}
-                    <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" className="hidden"
-                      onChange={e => {
-                        const file = e.target.files?.[0]
-                        if (!file) return
-                        const reader = new FileReader()
-                        reader.onload = async ev => {
-                          const url = ev.target?.result as string
-                          setProductImageDataUrl(url)
-                          setProductImageCutoutUrl(null)
-                          setBgRemovalError(false)
-                          setBgRemovalPct(0)
-                          setIsRemovingBg(true)
-                          const bg = await sampleCornerColor(url)
-                          setProductBgColor(bg)
-                          const cutout = await removeProductBackground(url, pct => setBgRemovalPct(pct))
-                          if (cutout) {
-                            setProductImageCutoutUrl(cutout)
-                          } else {
-                            setBgRemovalError(true)
-                            setProductImageCutoutUrl(null)
-                          }
-                          setIsRemovingBg(false)
-                        }
-                        reader.readAsDataURL(file)
-                        e.target.value = ''
-                      }} />
-                  </label>
-                  {productImageDataUrl && (
-                    <div className="flex items-center gap-3 mt-1.5">
-                      <button onClick={() => { setProductImageDataUrl(null); setProductImageCutoutUrl(null); setIsRemovingBg(false); setBgRemovalError(false); setBgRemovalPct(0) }}
-                        className="text-xs text-slate-400 hover:text-red-500 transition-colors">
-                        画像を削除
-                      </button>
-                      {productImageCutoutUrl && !isRemovingBg && (
-                        <span className="flex items-center gap-1 text-[10px] font-semibold text-emerald-600 bg-emerald-50 border border-emerald-200 rounded-full px-2 py-0.5">
-                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                          </svg>
-                          背景除去済み
-                        </span>
-                      )}
-                      {bgRemovalError && !isRemovingBg && (
-                        <span className="flex items-center gap-1 text-[10px] font-semibold text-amber-600 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">
-                          ⚠ 背景除去失敗（元画像で合成）
-                        </span>
-                      )}
-                    </div>
-                  )}
-                  <p className="text-[11px] text-slate-400 mt-1.5 leading-relaxed">
-                    AIは常に背景のみ生成します。商品画像をアップロードすると背景除去後に自然合成します
-                  </p>
-                </div>
+                    <p className="text-[11px] text-slate-400 mt-1.5 leading-relaxed">
+                      アップロードすると背景除去後にAI背景と自然合成します
+                    </p>
+                  </div>
+                )}
 
                 {/* デザインスタイル */}
                 <div>
@@ -1094,8 +1047,8 @@ export default function BannerGenerator() {
                           style={{
                             backgroundColor: c,
                             boxShadow: form.mainColor === c
-                              ? `0 0 0 2px white, 0 0 0 4px ${c}, 0 4px 8px rgba(0,0,0,0.2)`
-                              : '0 1px 3px rgba(0,0,0,0.15)',
+                              ? `0 0 0 2px white, 0 0 0 4px ${c === '#ffffff' ? '#94a3b8' : c}, 0 4px 8px rgba(0,0,0,0.2)`
+                              : c === '#ffffff' ? '0 1px 3px rgba(0,0,0,0.12), 0 0 0 1px #e2e8f0' : '0 1px 3px rgba(0,0,0,0.15)',
                             transform: form.mainColor === c ? 'scale(1.15)' : 'scale(1)',
                           }} />
                       ))}

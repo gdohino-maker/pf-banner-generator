@@ -12,20 +12,15 @@ type RequestBody = {
   productName?: string
   productImageDesc?: string
   category: string
-  target: string
+  target?: string
   catchcopy: string
   color: string
   size: { label: string; width: number; height: number }
   textPosition?: string
-  referenceUrl?: string
   designStyle?: string
   productImageBase64?: string
   productImageMimeType?: string
   productBgColor?: string
-  productFeatures?: string
-  saleInfo?: string
-  campaignType?: string
-  copyTone?: string
   variations?: 1 | 2
 }
 
@@ -45,25 +40,6 @@ const DESIGN_STYLE_PROMPTS: Record<string, string> = {
     'Soft warm earthy gradient — warm beige, sage green, natural linen tones. Gentle natural daylight feel with soft bokeh. Organic airy eco-inspired atmosphere through natural color palette.',
 }
 
-// ─── キャンペーン種別 → 背景エネルギー（物体なし）────────────────────────────
-const CAMPAIGN_TYPE_PROMPTS: Record<string, string> = {
-  sale:    'High-energy bold warm gradient with strong visual excitement. Dynamic light burst from center. Urgent energetic color atmosphere.',
-  new:     'Fresh clean bright gradient with cool luminous tones. Crisp revealing light suggesting discovery and newness. Contemporary minimalist glow.',
-  season:  'Seasonal mood color palette with soft atmospheric gradients evoking the season through color temperature and light quality only.',
-  ranking: 'Prestigious warm gold and deep tones. Confident premium lighting with golden accent glow suggesting achievement and authority.',
-  set:     'Generous abundant warm gradient with rich full tones. Welcoming wide open color field suggesting completeness and value.',
-  gift:    'Elegant warm sophisticated gradient. Soft premium glow with warm accent light. Special occasion luxury atmosphere through refined color.',
-}
-
-// ─── コピートーン → 背景雰囲気（物体なし）────────────────────────────────────
-const COPY_TONE_PROMPTS: Record<string, string> = {
-  premium:  'Deep rich dark gradient — near-black or pure white field. Ultra-premium minimalist lighting. Aspirational restrained elegance through tonal depth.',
-  bargain:  'Bright cheerful warm gradient. Inviting accessible color palette with open friendly light. Welcoming approachable atmosphere.',
-  urgent:   'High-contrast dramatic gradient with bold color tension. Sharp directional light. Strong visual urgency through color and shadow.',
-  safe:     'Calm balanced soft gradient. Stable even professional lighting. Trustworthy reliable authoritative atmosphere through clean neutral tones.',
-  health:   'Fresh vibrant clean gradient — natural greens, whites, and organic tones. Soft natural light quality. Vitality and wellness through color.',
-  fun:      'Bright joyful colorful gradient. Saturated playful tones with cheerful bokeh bursts. Celebratory energetic positive atmosphere.',
-}
 
 const DESIGN_STYLE_JA: Record<string, string> = {
   professional: 'プロフェッショナル（高級感・信頼感）',
@@ -74,84 +50,6 @@ const DESIGN_STYLE_JA: Record<string, string> = {
   natural:      'ナチュラル（自然・優しい）',
 }
 
-// ─── 楽天URLからページデザインヒント取得 ─────────────────────────────────────
-async function fetchPageDesignHints(url: string, ai: GoogleGenAI): Promise<string> {
-  if (!url?.trim()) return ''
-  try {
-    const res = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; BannerBot/1.0; +https://banner-app)',
-        'Accept': 'text/html,application/xhtml+xml',
-        'Accept-Language': 'ja,en;q=0.9',
-      },
-      signal: AbortSignal.timeout(7000),
-    })
-    if (!res.ok) return ''
-    const html = await res.text()
-
-    const clean = (s: string) => s.replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'").trim()
-
-    const themeColor =
-      html.match(/name=["']theme-color["'][^>]*content=["']([^"']+)["']/i)?.[1] ||
-      html.match(/content=["']([^"']+)["'][^>]*name=["']theme-color["']/i)?.[1]
-    const ogTitle =
-      html.match(/property=["']og:title["'][^>]*content=["']([^"']+)["']/i)?.[1] ||
-      html.match(/<title>([^<]+)<\/title>/i)?.[1]
-    const ogDesc =
-      html.match(/property=["']og:description["'][^>]*content=["']([^"']+)["']/i)?.[1] ||
-      html.match(/name=["']description["'][^>]*content=["']([^"']+)["']/i)?.[1]
-    const ogImage =
-      html.match(/property=["']og:image["'][^>]*content=["']([^"']+)["']/i)?.[1] ||
-      html.match(/content=["']([^"']+)["'][^>]*property=["']og:image["']/i)?.[1]
-
-    const hints: string[] = []
-    if (themeColor) hints.push(`reference page accent color: ${themeColor}`)
-    if (ogTitle)    hints.push(`reference product title: "${clean(ogTitle).slice(0, 80)}"`)
-    if (ogDesc)     hints.push(`reference page context: "${clean(ogDesc).slice(0, 150)}"`)
-
-    let imageAnalysis = ''
-    if (ogImage) {
-      imageAnalysis = await analyzeReferenceImage(ai, ogImage)
-    }
-
-    const hintStr = hints.length > 0
-      ? `REFERENCE PAGE DESIGN HINTS (from ${url.slice(0, 50)}): ${hints.join('. ')}. Align visual style with this page's design language.`
-      : ''
-
-    return [hintStr, imageAnalysis].filter(Boolean).join(' ')
-  } catch {
-    return ''
-  }
-}
-
-// ─── og:image を分析してデザイン参照情報を取得 ───────────────────────────────
-async function analyzeReferenceImage(ai: GoogleGenAI, imageUrl: string): Promise<string> {
-  try {
-    const res = await fetch(imageUrl, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; BannerBot/1.0)' },
-      signal: AbortSignal.timeout(6000),
-    })
-    if (!res.ok) return ''
-    const contentType = res.headers.get('content-type') ?? ''
-    if (!contentType.startsWith('image/')) return ''
-    const buffer = await res.arrayBuffer()
-    const base64 = Buffer.from(buffer).toString('base64')
-    const mimeType = contentType.split(';')[0].trim()
-    const result = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: [{
-        role: 'user',
-        parts: [
-          { inlineData: { mimeType, data: base64 } },
-          { text: 'Analyze this product/banner image as a design reference. English only, max 80 words: 1) exact dominant colors and secondary colors with their mood, 2) visual style (premium/casual/energetic/etc) and aesthetic category, 3) background style and lighting character, 4) photography technique and atmosphere. This will be used to match the visual language of a new banner.' },
-        ],
-      }],
-    })
-    return result.text?.trim() ? `REFERENCE IMAGE ANALYSIS: ${result.text.trim()}` : ''
-  } catch {
-    return ''
-  }
-}
 
 // ─── Gemini でウェブ検索して商品のブランドカラーを調べ、Imagen用の色文章を生成 ─
 // 出力はImagenプロンプトに直接埋め込む自然言語の色・ムード記述のみ
@@ -373,12 +271,7 @@ function textPositionToSpaceDesc(pos: string): string {
 }
 
 
-// ─── プロンプト構築（Imagen 4用 — 短く・色最優先・物体禁止）─────────────────
-// 設計原則:
-//   1. Imagenに商品名・ブランド名・「banner」「commercial」を一切渡さない
-//   2. ブランドカラー（Gemini検索結果）がある場合はユーザー選択色を完全に無視
-//   3. プロンプトを短く保つ（Imagenは先頭300トークンを最重視、長いほど後半が無視される）
-//   4. 色指定を最前列に配置
+// ─── プロンプト構築（Imagen 4用 — 色最優先・物体絶対禁止）──────────────────
 function buildPrompt(input: {
   productName: string
   category: string
@@ -387,14 +280,9 @@ function buildPrompt(input: {
   color: string
   textPosition?: string
   designStyle?: string
-  pageHints?: string
   hasProductImage?: boolean
   productImageAnalysis?: string
   productBgColor?: string
-  productFeatures?: string
-  saleInfo?: string
-  campaignType?: string
-  copyTone?: string
   productVisualDesc?: string
   size?: { width: number; height: number }
 }): string {
@@ -405,10 +293,7 @@ function buildPrompt(input: {
   const productSide = textSide === 'left' ? 'right' : 'left'
   const productBgColorDesc = input.productBgColor ? hexToColorDescription(input.productBgColor) : ''
 
-  // ─── 色指定（優先順位厳守）───────────────────────────────────────────────────
-  // 優先1: 商品画像あり → ユーザー色（テキスト側）＋商品背景色（商品側）
-  // 優先2: Geminiブランドカラーあり → ブランドカラーのみ（ユーザー色は混ぜない）
-  // 優先3: 何もなし → ユーザー選択色
+  // 色優先順位: 商品画像サンプリング色 > Geminiブランドカラー > ユーザー選択色
   let colorSpec: string
   if (input.hasProductImage && productBgColorDesc) {
     colorSpec = `smooth gradient from ${userColorDesc} on the ${textSide} side to ${productBgColorDesc} on the ${productSide} side`
@@ -418,33 +303,24 @@ function buildPrompt(input: {
     colorSpec = `${userColorDesc} gradient, lighter toward the ${productSide} side`
   }
 
-  // ─── スタイル（簡潔に1つだけ）───────────────────────────────────────────────
   const styleLine = input.designStyle && DESIGN_STYLE_PROMPTS[input.designStyle]
     ? DESIGN_STYLE_PROMPTS[input.designStyle]
     : (CATEGORY_STYLE[input.category] ?? CATEGORY_STYLE['その他'])
 
   const extraMood = [
-    input.campaignType ? CAMPAIGN_TYPE_PROMPTS[input.campaignType] : '',
-    input.copyTone ? COPY_TONE_PROMPTS[input.copyTone] : '',
-    input.catchcopy?.trim() ? `Evoke the feeling: "${input.catchcopy}".` : '',
-    input.productImageAnalysis ? `Secondary tones: ${input.productImageAnalysis}` : '',
+    input.catchcopy?.trim() ? `Mood evoked: "${input.catchcopy}".` : '',
+    input.productImageAnalysis ? `Product color harmony reference: ${input.productImageAnalysis}` : '',
   ].filter(Boolean).join(' ')
 
-  // ─── 最終プロンプト（短く・明確に）──────────────────────────────────────────
   return [
-    // フレーミング（商品・バナー・コマーシャルの文脈ゼロ）
-    `Abstract gradient background photograph. Professional studio quality.`,
-    // サイズ別構図ヒント
+    // 先頭に物体禁止を明示（Imagenは先頭を最重視）
+    `Pure abstract color gradient wash. Zero objects. Zero products. Zero subjects. Color and light only.`,
     compositionHint,
-    // 色（最重要 — 先頭に配置）
     `COLORS: ${colorSpec}.`,
-    // 構図
-    `Smooth seamless gradient. Soft defocused bokeh light orbs. Gentle atmospheric studio light bloom from the ${productSide} side. The ${spaceDesc} is kept perfectly clear and open for text.`,
-    // スタイル・ムード
+    `Seamless smooth gradient field. Soft defocused bokeh spheres of light. Atmospheric studio light bloom from the ${productSide} side. The ${spaceDesc} is perfectly clear and open for text overlay.`,
     styleLine,
     extraMood,
-    // 禁止（シンプル・具体的）
-    `NO objects. NO products. NO bottles. NO shoes. NO food. NO clothing. NO hands. NO faces. NO text. NO letters. NO numbers. NO logos. Only abstract gradient colors and soft bokeh light. Any identifiable object = automatic failure.`,
+    `ABSOLUTE PROHIBITION — nothing allowed except pure color gradients and bokeh light: NO bottles, NO containers, NO food, NO products, NO shoes, NO clothing, NO hands, NO faces, NO text, NO letters, NO numbers, NO logos, NO recognizable shapes of any kind. Pure abstract color wash only. Any object = complete generation failure.`,
   ].filter(Boolean).join(' ')
 }
 
@@ -518,25 +394,24 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'リクエストの形式が不正です' }, { status: 400 })
   }
 
-  const { productName, productImageDesc, category, target, catchcopy, color, size, textPosition, referenceUrl, designStyle, productImageBase64, productImageMimeType, productBgColor, productFeatures, saleInfo, campaignType, copyTone, variations } = body
+  const { productName, productImageDesc, category, target, catchcopy, color, size, textPosition, designStyle, productImageBase64, productImageMimeType, productBgColor, variations } = body
 
-  if ((!productName?.trim() && !productImageDesc?.trim()) || !target?.trim()) {
-    return NextResponse.json({ error: '商品名またはイメージ・ターゲットは必須です' }, { status: 400 })
+  const hasProductImage = !!(productImageBase64 && productImageMimeType)
+  if (!hasProductImage && !productName?.trim() && !productImageDesc?.trim()) {
+    return NextResponse.json({ error: '商品画像またはバナーイメージを入力してください' }, { status: 400 })
   }
 
   const ai = new GoogleGenAI({ apiKey })
-  const hasProductImage = !!(productImageBase64 && productImageMimeType)
 
   const productIdentifier = [productName, productImageDesc].filter(Boolean).join(' / ') || '商品'
 
-  const [pageHints, productImageAnalysis, productVisualDesc] = await Promise.all([
-    fetchPageDesignHints(referenceUrl ?? '', ai),
+  const [productImageAnalysis, productVisualDesc] = await Promise.all([
     hasProductImage ? analyzeProductImage(ai, productImageBase64!, productImageMimeType!) : Promise.resolve(''),
-    !hasProductImage ? describeProductVisually(ai, productName, productImageDesc, category, target, productFeatures, saleInfo, designStyle) : Promise.resolve(''),
+    !hasProductImage ? describeProductVisually(ai, productName, productImageDesc, category, target ?? '', undefined, undefined, designStyle) : Promise.resolve(''),
   ])
 
-  const prompt = buildPrompt({ productName: productIdentifier, category, target, catchcopy, color, textPosition, designStyle, pageHints, hasProductImage, productImageAnalysis, productBgColor, productFeatures, saleInfo, campaignType, copyTone, productVisualDesc, size })
-  const reasoning = buildReasoning({ productName: productIdentifier, category, target, catchcopy, color, textPosition, designStyle, referenceUrl })
+  const prompt = buildPrompt({ productName: productIdentifier, category, target: target ?? '', catchcopy, color, textPosition, designStyle, hasProductImage, productImageAnalysis, productBgColor, productVisualDesc, size })
+  const reasoning = buildReasoning({ productName: productIdentifier, category, target: target ?? '', catchcopy, color, textPosition, designStyle })
   const aspectRatio = toImagenAspectRatio(size.width, size.height)
 
   try {
